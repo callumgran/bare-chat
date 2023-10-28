@@ -9,8 +9,8 @@ compile_commands.json
 
 # compiled binary, but not sources
 server
-./client
-./.env
+client
+.env
 
 # ignore soydev editor
 .vscode/*
