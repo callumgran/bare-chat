@@ -1,4 +1,4 @@
-# P2P Chat Service
+# Bare Chat
 
 ## Introduction
 This is a simple command-line based peer-to-peer (P2P) chat service written in C in about 10 hours (this is reflected in the quality atm).
