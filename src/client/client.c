@@ -16,34 +16,19 @@
  */
 
 #include <arpa/inet.h>
+#include <chatp2p/address_book.h>
+#include <chatp2p/chat_msg.h>
+#include <client/client.h>
+#include <fcntl.h>
+#include <lib/env_parser.h>
+#include <lib/logger.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
 #include <sys/time.h>
-#include <chatp2p/address_book.h>
-#include <chatp2p/chat_msg.h>
-#include <client/client.h>
-#include <lib/env_parser.h>
-#include <lib/logger.h>
-#include <fcntl.h>
 #include <unistd.h>
-
-
-static void check_quit(void *arg)
-{
-	ChatClient *client = (ChatClient *)arg;
-
-	while (getc(stdin) != 'q')
-		;
-
-	shutdown(client->socket, SHUT_RDWR);
-	close(client->socket);
-	LOG_INFO("Quitting...\n");
-
-	client->running = false;
-}
 
 static void set_nonblocking(int socket)
 {
@@ -65,7 +50,7 @@ static void sleep_seconds(uint32_t sleep_time)
 static void print_help()
 {
 	printf("---------------------------------------------\n");
-    printf("%s", CLIENT_HELP_MSG);
+	printf("%s", CLIENT_HELP_MSG);
 	printf("---------------------------------------------\n");
 }
 
@@ -81,7 +66,7 @@ static void send_ping_to_addr(void *arg, void *data)
 
 static void ping_loop(void *arg)
 {
-	ClientThreadData *data = (ClientThreadData *)arg;
+	ChatClient *data = (ChatClient *)arg;
 	ChatMessage ping;
 	ping.header.server_key = SERVER_KEY;
 	ping.header.type = CHAT_MESSAGE_TYPE_PING;
@@ -90,6 +75,11 @@ static void ping_loop(void *arg)
 	uint32_t i = 61;
 
 	while (data->running) {
+		if (!data->connected) {
+			sleep_seconds(1);
+			continue;
+		}
+
 		if (i++ < CLIENT_PING_INTERVAL && data->running) {
 			sleep_seconds(1);
 			continue;
@@ -107,21 +97,215 @@ static void ping_loop(void *arg)
 	LOG_INFO("Quitting ping loop...");
 }
 
-static bool string_eq(const char *fst, const void *snd)
+static bool string_eq(const char *fst, const char *snd)
 {
-	return strcmp(fst, snd) == 0;
+	int fst_len = strlen(fst);
+	int snd_len = strlen(snd);
+	return strncmp(fst, snd, fst_len < snd_len ? fst_len : snd_len) == 0;
+}
+
+static void handle_leave_command(ChatClient *data)
+{
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_LEAVE;
+	msg.header.len = 0;
+	msg.body = NULL;
+	chat_msg_send(&msg, data->socket, &data->server_addr);
+	data->connected = false;
+	LOG_INFO("Disconnected from server");
+}
+
+static void handle_info_command(ChatClient *data)
+{
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_INFO;
+	msg.header.len = 0;
+	msg.body = NULL;
+	chat_msg_send(&msg, data->socket, &data->server_addr);
+}
+
+static void handle_join_command(ChatClient *data)
+{
+	char *addr = strtok(NULL, "\n");
+	if (addr == NULL) {
+		LOG_ERR("Invalid arguments for join command");
+		print_help();
+		return;
+	}
+
+	if (addr_from_string(&data->server_addr, addr) < 0) {
+		LOG_ERR("Invalid address for join command");
+		print_help();
+		return;
+	}
+
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_JOIN;
+	msg.header.len = strlen(data->name);
+	msg.body = data->name;
+	LOG_INFO("Sending join message to server...\n");
+	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
+	chat_msg_send(&msg, data->socket, &data->server_addr);
+	data->connected = true;
+	LOG_INFO("Connected to server");
+}
+
+static void handle_connect_command(ChatClient *data)
+{
+	char *addr = strtok(NULL, "\n");
+	if (addr == NULL) {
+		LOG_ERR("Invalid arguments for connect command");
+		print_help();
+		return;
+	}
+
+	struct sockaddr_in ext_addr = { 0 };
+	if (addr_from_string(&ext_addr, addr) < 0) {
+		LOG_ERR("Invalid address for connect command");
+		print_help();
+		return;
+	}
+
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_CONNECT;
+	msg.header.len = strlen(data->name);
+	msg.body = data->name;
+	LOG_INFO("Sending connect message to other user...\n");
+	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
+	chat_msg_send(&msg, data->socket, &ext_addr);
+	LOG_INFO("The other user should now be able to send you messages");
+}
+
+static void handle_disconnect_command(ChatClient *data)
+{
+	char *addr = strtok(NULL, " ");
+	if (addr == NULL) {
+		LOG_ERR("Invalid arguments for disconnect command");
+		print_help();
+		return;
+	}
+
+	struct sockaddr_in ext_addr = { 0 };
+	if (addr_from_string(&ext_addr, addr) < 0) {
+		LOG_ERR("Invalid address for disconnect command");
+		print_help();
+		return;
+	}
+
+	if (!addr_book_contains(data->addr_book, &ext_addr)) {
+		LOG_ERR("Unknown client");
+		return;
+	}
+
+	addr_book_remove(data->addr_book, &ext_addr);
+
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
+	msg.header.len = strlen(data->name);
+	msg.body = data->name;
+	LOG_INFO("Sending disconnect message to other user...\n");
+	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
+	chat_msg_send(&msg, data->socket, &ext_addr);
+	LOG_INFO("The other user should now be unable to send you messages");
+}
+
+static void handle_list_command(ChatClient *data)
+{
+	if (addr_book_empty(data->addr_book)) {
+		LOG_INFO("Address book is empty");
+		return;
+	}
+
+	char buffer[1024] = { 0 };
+
+	addr_book_to_string(buffer, data->addr_book, NULL);
+	LOG_INFO("%s", buffer);
+}
+
+static void handle_setname_command(ChatClient *data)
+{
+	char *name = strtok(NULL, "\n");
+	if (name == NULL) {
+		LOG_ERR("Invalid arguments for setname command");
+		print_help();
+		return;
+	}
+
+	memcpy(data->name, name, 256);
+}
+
+static void handle_msg_command(ChatClient *data)
+{
+	char *addr = strtok(NULL, " ");
+	if (addr == NULL) {
+		LOG_ERR("Invalid arguments for msg command");
+		print_help();
+		return;
+	}
+
+	char *msg = strtok(NULL, "\n");
+	if (msg == NULL) {
+		LOG_ERR("Invalid arguments for msg command");
+		print_help();
+		return;
+	}
+
+	AddrEntry *entry = NULL;
+	struct sockaddr_in ext_addr = { 0 };
+	if (addr_from_string(&ext_addr, addr) < 0) {
+		entry = addr_book_find_by_name(data->addr_book, addr);
+		if (entry == NULL) {
+			LOG_ERR("Invalid usage of msg command or unknown client");
+			print_help();
+			return;
+		}
+		memcpy(&ext_addr, &entry->addr, sizeof(struct sockaddr_in));
+	} else {
+		entry = addr_book_find(data->addr_book, &ext_addr);
+	}
+
+	chat_msg_send_text(msg, data->socket, &ext_addr);
+	LOG_INFO("Message sent to %s", entry->name);
+}
+
+static void handle_ping_command(ChatClient *data)
+{
+	char *addr = strtok(NULL, "\n");
+	if (addr == NULL) {
+		LOG_ERR("Invalid arguments for ping command");
+		print_help();
+		return;
+	}
+
+	struct sockaddr_in ext_addr = { 0 };
+	if (addr_from_string(&ext_addr, addr) < 0) {
+		LOG_ERR("Invalid address for ping command");
+		print_help();
+		return;
+	}
+
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_PING;
+	msg.header.len = 0;
+	msg.body = NULL;
+	LOG_INFO("Sending ping message to other address %s...\n", addr);
+	chat_msg_send(&msg, data->socket, &ext_addr);
 }
 
 static void user_command_loop(void *arg)
 {
-	ClientThreadData *data = (ClientThreadData *)arg;
+	ChatClient *data = (ChatClient *)arg;
+	printf("Welcome to chatp2p client!\n");
 	print_help();
-	char buf[1024];
-	size_t len = 0;
-	ssize_t read_len = 0;
+	char buf[1024] = { 0 };
 	while (data->running) {
-		if (fprintf(stdout, ">") && (read_len = getline(&buf, &len, stdin)) != -1) {
-			printf("Input: %s", buf);
+		if (fprintf(stdout, "> ") && fgets(buf, sizeof(buf), stdin) != NULL) {
 			char *command = strtok(buf, " ");
 			if (command == NULL) {
 				print_help();
@@ -130,15 +314,34 @@ static void user_command_loop(void *arg)
 
 			if (string_eq(command, HELP_COMMAND)) {
 				print_help();
+			} else if (string_eq(command, QUIT_COMMAND)) {
+				// Here I need to send a disconnect message to all connected clients
+				// and then exit in the future
+				if (data->connected)
+					handle_leave_command(data);
+
+				data->running = false;
 			} else if (string_eq(command, INFO_COMMAND)) {
-				ChatMessage msg = { 0 };
-				msg.header.server_key = SERVER_KEY;
-				msg.header.type = CHAT_MESSAGE_TYPE_INFO;
-				msg.header.len = 0;
-				msg.body = NULL;
-				chat_msg_send(&msg, data->socket, &data->server_addr);
+				handle_info_command(data);
+			} else if (string_eq(command, JOIN_COMMAND)) {
+				handle_join_command(data);
+			} else if (string_eq(command, LEAVE_COMMAND)) {
+				handle_leave_command(data);
+			} else if (string_eq(command, CONNECT_COMMAND)) {
+				handle_connect_command(data);
+			} else if (string_eq(command, DISCONNECT_COMMAND)) {
+				handle_disconnect_command(data);
+			} else if (string_eq(command, LIST_COMMAND)) {
+				handle_list_command(data);
+			} else if (string_eq(command, SETNAME_COMMAND)) {
+				handle_setname_command(data);
+				LOG_INFO("Set name to %s", data->name);
+			} else if (string_eq(command, MSG_COMMAND)) {
+				handle_msg_command(data);
+			} else if (string_eq(command, PING_COMMAND)) {
+				handle_ping_command(data);
 			} else {
-				LOG_ERR("Unknown command: %s", command);
+				LOG_ERR("Unknown command: '%s'", command);
 				print_help();
 			}
 		}
@@ -173,7 +376,54 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 	LOG_INFO("-------------------------------------------------------");
 }
 
-static void chat_msg_leave_handler(const ChatMessage *msg, ClientThreadData *data)
+static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
+{
+	if (addr_book_contains(data->addr_book, &data->ext_addr)) {
+		LOG_INFO("Client already in address book");
+		return;
+	}
+
+	char addr_str[INET_ADDRSTRLEN];
+	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
+		LOG_ERR("Could not convert address to string");
+		return;
+	}
+
+	// TODO: Add checks to make sure name of client is not to long etc, names should also be unique
+
+	addr_book_push_back(data->addr_book, &data->ext_addr, msg->body);
+
+	ChatMessage connect = { 0 };
+	connect.header.server_key = SERVER_KEY;
+	connect.header.type = CHAT_MESSAGE_TYPE_CONNECT_RESPONSE;
+	connect.header.len = strlen(data->name);
+	connect.body = data->name;
+	printf("Connect.body: %s\n", connect.body);
+
+	chat_msg_send(&connect, data->socket, &data->ext_addr);
+}
+
+static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThreadData *data)
+{
+	if (addr_book_contains(data->addr_book, &data->ext_addr)) {
+		LOG_INFO("Client already in address book");
+		return;
+	}
+
+	char addr_str[INET_ADDRSTRLEN];
+	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
+		LOG_ERR("Could not convert address to string");
+		return;
+	}
+
+	addr_book_push_back(data->addr_book, &data->ext_addr, msg->body);
+
+	chat_msg_send_text("Howdy new partner!", data->socket, &data->ext_addr);
+
+	LOG_INFO("Client %s with nickname %s received your connection request, you can now communicate by name :)", addr_str, msg->body);
+}
+
+static void chat_msg_disconnect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	if (!addr_book_contains(data->addr_book, &data->ext_addr)) {
 		LOG_INFO("Client not in address book");
@@ -193,23 +443,7 @@ static void chat_msg_leave_handler(const ChatMessage *msg, ClientThreadData *dat
 	LOG_INFO("Client %s with nickname %s closed their connection to you", addr_str, msg->body);
 }
 
-static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
-{
-	// TODO: This will be how clients connect to each other through udp hole punching
-}
-
-static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *data)
-{
-	// TODO: This will be how clients receive errors from the server
-}
-
-static void chat_msg_info_handler(const ChatMessage *msg, ClientThreadData *data)
-{
-	// TODO: This will be how clients receive info from the server (e.g. address book, server ip,
-	// etc.)
-}
-
-static void chat_msg_ping_handler(const ChatMessage *msg, ClientThreadData *data)
+static void chat_msg_ping_handler(ClientThreadData *data)
 {
 	char addr_str[INET_ADDRSTRLEN];
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
@@ -226,8 +460,10 @@ static void chat_msg_ping_handler(const ChatMessage *msg, ClientThreadData *data
 			LOG_ERR("Unknown client %s tried to ping you!", addr_str);
 		}
 		LOG_INFO("Check your OPSEC, you might be getting attacked!");
+		return;
 	}
 
+	clock_gettime(CLOCK_MONOTONIC, &entry->last_seen);
 
 	LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
 
@@ -242,14 +478,18 @@ static void chat_msg_ping_handler(const ChatMessage *msg, ClientThreadData *data
 	LOG_INFO("Sent PONG message to %s : %s", entry->name, addr_str);
 }
 
-static void chat_msg_pong_handler(const ChatMessage *msg, ClientThreadData *data)
-{
-	// TODO: This will be how clients respond to pings from the server
-}
-
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	// TODO: This will be how clients handle unknown message types
+	(void) msg;
+	(void) data;
+	LOG_ERR("Unknown message type");
+}
+
+static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *data)
+{
+	(void) msg;
+	(void) data;
+	// TODO: This will be how clients receive errors from the server
 }
 
 static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
@@ -261,28 +501,26 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 	case CHAT_MESSAGE_TYPE_TEXT:
 		chat_msg_text_handler(msg, data);
 		break;
-	case CHAT_MESSAGE_TYPE_JOIN:
-		LOG_ERR("Client tried to join you, but you are not a server lmao!");
-		break;
-	case CHAT_MESSAGE_TYPE_LEAVE:
-		chat_msg_leave_handler(msg, data);
-		break;
 	case CHAT_MESSAGE_TYPE_CONNECT:
 		chat_msg_connect_handler(msg, data);
+		break;
+	case CHAT_MESSAGE_TYPE_CONNECT_RESPONSE:
+		chat_msg_connect_response_handler(msg, data);
+		break;
+	case CHAT_MESSAGE_TYPE_DISCONNECT:
+		chat_msg_disconnect_handler(msg, data);
 		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, data);
 		break;
-	case CHAT_MESSAGE_TYPE_INFO:
-		chat_msg_info_handler(msg, data);
-		break;
 	case CHAT_MESSAGE_TYPE_PING:
-		chat_msg_ping_handler(msg, data);
+		chat_msg_ping_handler(data);
 		break;
 	case CHAT_MESSAGE_TYPE_PONG:
-		chat_msg_pong_handler(msg, data);
 		break;
 	case CHAT_MESSAGE_TYPE_UNKNOWN:
+		chat_msg_unknown_handler(msg, data);
+		break;
 	default:
 		chat_msg_unknown_handler(msg, data);
 		break;
@@ -313,23 +551,13 @@ static bool check_fd(int nfds, int client_fd, fd_set *readfds)
 	return select(nfds, readfds, NULL, NULL, &timeout) > 0;
 }
 
-int client_init(ChatClient *client, char *env_file, char *username, char *address)
+int client_init(ChatClient *client, char *env_file)
 {
 	EnvVars *env_vars = env_parse(env_file);
 
 	client->socket = socket(AF_INET, SOCK_DGRAM, 0);
 	if (client->socket < 0) {
 		LOG_ERR("Could not create socket");
-		return -1;
-	}
-
-	if (strlen(username) > 256)
-		LOG_ERR("Username too long, truncating to 256 characters");
-
-	memcpy(client->name, username, 256);
-
-	if (addr_from_string(&client->server_addr, address) < 0) {
-		LOG_ERR("Could not convert address to string");
 		return -1;
 	}
 
@@ -364,27 +592,24 @@ int client_run(ChatClient *client)
 	threadpool_start(client->threadpool);
 
 	client->running = true;
-
-	LOG_INFO("Client started, press 'q' to quit\n");
-
-	submit_worker_task(client->threadpool, check_quit, (void *)client);
-
-	ClientThreadData base_data = { 0 };
-	base_data.running = &client->running;
-	base_data.socket = client->socket;
-	base_data.addr_book = client->addr_book;
-	base_data.server_addr = client->server_addr;
-	memcpy(base_data.name, client->name, 256);
-	submit_worker_task(client->threadpool, ping_loop, (void *)&base_data);
-	submit_worker_task(client->threadpool, user_command_loop, (void *)&base_data);
-
 	set_nonblocking(client->socket);
+	printf("Socket: %d\n", client->socket);
+
+	submit_worker_task(client->threadpool, ping_loop, (void *)client);
+	submit_worker_task(client->threadpool, user_command_loop, (void *)client);
 
 	int nfds = client->socket + 1;
 	fd_set readfds;
 	char buffer[65536] = { 0 };
 
+	set_nonblocking(nfds);
+
 	while (client->running) {
+		if (!client->connected) {
+			sleep_seconds(1);
+			continue;
+		}
+
 		if (!check_fd(nfds, client->socket, &readfds))
 			continue;
 
@@ -403,6 +628,7 @@ int client_run(ChatClient *client)
 			data->addr_book = client->addr_book;
 			data->socket = client->socket;
 			data->server_addr = client->server_addr;
+			data->name = client->name;
 			submit_worker_task(client->threadpool, handle_receive_msg, (void *)data);
 		} else {
 			LOG_ERR("recvfrom() failed for some reason");

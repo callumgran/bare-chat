@@ -29,6 +29,9 @@ typedef enum {
 	CHAT_MESSAGE_TYPE_JOIN, // Used for when a client joins the server
 	CHAT_MESSAGE_TYPE_LEAVE, // Used for when a client leaves the server
 	CHAT_MESSAGE_TYPE_CONNECT, // Used for when a client connects to a peer
+	CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, // Used for when a client connects in response to a connect
+										// message
+	CHAT_MESSAGE_TYPE_DISCONNECT, // Used for when a client disconnects from a peer
 	CHAT_MESSAGE_TYPE_ERROR, // Used for sending errors to the client
 	CHAT_MESSAGE_TYPE_INFO, // Used for sending info about the server
 	CHAT_MESSAGE_TYPE_PING, // Used for pinging the server

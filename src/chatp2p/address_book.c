@@ -150,8 +150,8 @@ bool addr_book_push_back(AddrBook *addr_book, struct sockaddr_in *addr, const ch
 	memcpy(&node->addr, addr, sizeof(struct sockaddr_in));
 	strncpy(node->name, name, sizeof(node->name));
 	clock_gettime(CLOCK_MONOTONIC_RAW, &node->last_seen);
-	node->next = addr_book->head;
-	node->prev = NULL;
+	node->prev = addr_book->tail;
+	node->next = NULL;
 
 	if (addr_book->tail != NULL)
 		addr_book->tail->next = node;
@@ -235,9 +235,26 @@ AddrEntry *addr_book_find(const AddrBook *addr_book, const struct sockaddr_in *a
 	return NULL;
 }
 
+AddrEntry *addr_book_find_by_name(const AddrBook *addr_book, const char *name)
+{
+	if (addr_book == NULL || name == NULL)
+		return NULL;
+
+	AddrEntry *node = addr_book->head;
+
+	while (node != NULL) {
+		if (strcmp(node->name, name) == 0)
+			return node;
+
+		node = node->next;
+	}
+
+	return NULL;
+}
+
 bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockaddr_in *client_addr)
 {
-	if (buffer == NULL || addr_book == NULL || client_addr == NULL)
+	if (buffer == NULL || addr_book == NULL)
 		return false;
 
 	AddrEntry *node = addr_book->head;
@@ -271,9 +288,11 @@ bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockadd
 			free(tmp);
 		}
 
-		if (addr_eq(&node->addr, client_addr)) {
-			node = node->next;
-			continue;
+		if (client_addr != NULL) {
+			if (addr_eq(&node->addr, client_addr)) {
+				node = node->next;
+				continue;
+			}
 		}
 
 		char addr_str[INET_ADDRSTRLEN];
@@ -286,10 +305,6 @@ bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockadd
 
 	return true;
 }
-
-typedef struct {
-	AddrEntry *curr;
-} AddrBookIter;
 
 static void addr_book_start(AddrBookIter *iter, AddrBook *list)
 {

@@ -18,16 +18,10 @@
 #include <client/client.h>
 #include <lib/logger.h>
 
-int main(int argc, char **argv)
+int main(void)
 {
-	if (argc != 3) {
-		LOG_ERR("Usage: %s <username> <address>", argv[0]);
-		return -1;
-	}
-	char *username = argv[1];
-	char *address = argv[2];
 	ChatClient client;
-	if (client_init(&client, ".env", username, address) == -1) {
+	if (client_init(&client, ".env") == -1) {
 		LOG_ERR("Failed to initialize server, exiting...");
 		return -1;
 	}

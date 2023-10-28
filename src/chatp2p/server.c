@@ -39,12 +39,6 @@ static void set_nonblocking(int socket)
 	fcntl(socket, F_SETFL, flags);
 }
 
-static void chat_msg_text_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
-								  AddrBook *addrs, int socket)
-{
-	// TODO: This will be how clients send text messages to each other
-}
-
 static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 								  AddrBook *addrs, int socket)
 {
@@ -69,7 +63,7 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	LOG_INFO("Client %s with nickname %s joined the server", addr_str, msg->body);
 }
 
-static void chat_msg_leave_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
+static void chat_msg_leave_handler(struct sockaddr_in *client_addr,
 								   AddrBook *addrs, int socket)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
@@ -77,8 +71,8 @@ static void chat_msg_leave_handler(const ChatMessage *msg, struct sockaddr_in *c
 		return;
 	}
 
-	addr_book_remove(addrs, client_addr);
-
+	AddrEntry *entry = addr_book_find(addrs, client_addr);
+	
 	char addr_str[INET_ADDRSTRLEN];
 	if (addr_to_string(addr_str, client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
@@ -87,30 +81,32 @@ static void chat_msg_leave_handler(const ChatMessage *msg, struct sockaddr_in *c
 
 	chat_msg_send_text("Goodbye!", socket, client_addr);
 
-	LOG_INFO("Client %s with nickname %s left the server", addr_str, msg->body);
-}
-
-static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
-									 AddrBook *addrs, int socket)
-{
-	// TODO: This will be how clients connect to each other through punching
+	LOG_INFO("Client %s with nickname %s left the server", addr_str, entry->name);
+	addr_book_remove(addrs, client_addr);
 }
 
 static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 								   AddrBook *addrs, int socket)
 {
-	// TODO: This will be how clients receive errors from the server
+	// TODO: This will be how clients handle error messages
+	(void)addrs;
+	(void)socket;
+	(void)client_addr;
+	(void)msg;
 }
 
-static void chat_msg_info_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
+static void chat_msg_info_handler(struct sockaddr_in *client_addr,
 								  AddrBook *addrs, int socket)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
 		LOG_INFO("Client not in address book");
 		return;
 	}
+
 	char buf[4096] = { 0 };
 	bool ret = addr_book_to_string(buf, addrs, client_addr);
+
+	LOG_INFO("Sending address book to client");
 
 	if (!ret) {
 		LOG_ERR("Could not convert address book to string");
@@ -120,10 +116,26 @@ static void chat_msg_info_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	chat_msg_send_text(buf, socket, client_addr);
 }
 
-static void chat_msg_ping_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
+static void chat_msg_ping_handler(struct sockaddr_in *client_addr,
 								  AddrBook *addrs, int socket)
 {
-	LOG_INFO("Received PING message from client, sending PONG message");
+	char addr_str[INET_ADDRSTRLEN];
+	if (addr_to_string(addr_str, client_addr) < 0) {
+		LOG_ERR("Could not convert address to string");
+		return;
+	}
+
+	AddrEntry *entry = addr_book_find(addrs, client_addr);
+
+	if (entry == NULL) {
+		LOG_ERR("Unknown client %s tried to ping you!", addr_str);
+		LOG_INFO("Check your OPSEC, you might be getting attacked!");
+		return;
+	}
+
+	clock_gettime(CLOCK_MONOTONIC, &entry->last_seen);
+
+	LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
 
 	ChatMessage pong = { 0 };
 	pong.header.server_key = SERVER_KEY;
@@ -133,12 +145,6 @@ static void chat_msg_ping_handler(const ChatMessage *msg, struct sockaddr_in *cl
 
 	chat_msg_send(&pong, socket, client_addr);
 
-	char addr_str[INET_ADDRSTRLEN];
-	if (addr_to_string(addr_str, client_addr) < 0) {
-		LOG_ERR("Could not convert address to string");
-		return;
-	}
-
 	LOG_INFO("Sent PONG message to client %s", addr_str);
 }
 
@@ -146,36 +152,51 @@ static void chat_msg_ping_handler(const ChatMessage *msg, struct sockaddr_in *cl
 static void chat_msg_unknown_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 									 AddrBook *addrs, int socket)
 {
-	// TODO: This will be how clients handle unknown message types
+	// TODO: Find out if this is necessary
+	(void)addrs;
+	(void)socket;
+	(void)client_addr;
+	(void)msg;
 }
 
 static void chat_msg_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 							 AddrBook *addrs, int socket)
 {
+	if (msg->header.server_key != SERVER_KEY) {
+		LOG_ERR("Received message with invalid server key");
+		return;
+	}
+
 	if (msg->header.type < CHAT_MESSAGE_TYPE_COUNT)
 		LOG_INFO("Handling message of type: %s", CHAT_MESSAGE_TYPE_STRINGS[msg->header.type]);
 
 	switch (msg->header.type) {
 	case CHAT_MESSAGE_TYPE_TEXT:
-		chat_msg_text_handler(msg, client_addr, addrs, socket);
+		LOG_ERR("Received TEXT message from client, server doesn't receive TEXT messages");
 		break;
 	case CHAT_MESSAGE_TYPE_JOIN:
 		chat_msg_join_handler(msg, client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_LEAVE:
-		chat_msg_leave_handler(msg, client_addr, addrs, socket);
+		chat_msg_leave_handler(client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_CONNECT:
-		chat_msg_connect_handler(msg, client_addr, addrs, socket);
+		LOG_ERR("Received CONNECT message from client, server doesn't connect to clients");
+		break;
+	case CHAT_MESSAGE_TYPE_CONNECT_RESPONSE:
+		LOG_ERR("Received CONNECT_RESPONSE message from client, server doesn't connect to clients");
+		break;
+	case CHAT_MESSAGE_TYPE_DISCONNECT:
+		LOG_ERR("Received DISCONNECT message from client, server doesn't disconnect from clients");
 		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_INFO:
-		chat_msg_info_handler(msg, client_addr, addrs, socket);
+		chat_msg_info_handler(client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_PING:
-		chat_msg_ping_handler(msg, client_addr, addrs, socket);
+		chat_msg_ping_handler(client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_PONG:
 		LOG_ERR("Received PONG message from client, server doesn't send PING messages");

@@ -39,6 +39,10 @@ typedef struct address_book_t {
 	size_t size;
 } AddrBook;
 
+typedef struct {
+	AddrEntry *curr;
+} AddrBookIter;
+
 int addr_to_string(char *buffer, const struct sockaddr_in *addr);
 
 int addr_from_string(struct sockaddr_in *addr, const char *buffer);
@@ -59,6 +63,8 @@ bool addr_book_remove(AddrBook *list, const struct sockaddr_in *addr);
 bool addr_book_contains(const AddrBook *list, const struct sockaddr_in *addr);
 
 AddrEntry *addr_book_find(const AddrBook *list, const struct sockaddr_in *addr);
+
+AddrEntry *addr_book_find_by_name(const AddrBook *list, const char *name);
 
 bool addr_book_to_string(char *buffer, AddrBook *list, const struct sockaddr_in *client_addr);
 

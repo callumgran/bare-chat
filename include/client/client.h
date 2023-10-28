@@ -12,26 +12,33 @@
 #define CLIENT_HELP_MSG \
 	"Commands:\n\
 	help - Display's the help message\n\
+	quit - Disconnect from all users and exit\n\
 	info - Request all connected users in server address book\n\
 	list - List all connected users in local address book\n\
-	ping - Ping all connected users\n\
 	ping <ip:port> - Ping a specific user/server\n\
+	setname <name> - Set your name\n\
 	msg <ip:port> <message> - Send a message to a user\n\
-	join <ip:port> <username> - Join a server\n\
+	msg <name> <message> - Send a message to a user\n\
+	join <ip:port> - Join a server\n\
+	leave - Leave a server\n\
 	connect <ip:port> - Connect to a user\n\
 	disconnect <ip:port> - Disconnect from a user\n"
 
 #define HELP_COMMAND "help"
+#define QUIT_COMMAND "quit"
 #define INFO_COMMAND "info"
 #define LIST_COMMAND "list"
 #define PING_COMMAND "ping"
+#define SETNAME_COMMAND "setname"
 #define MSG_COMMAND "msg"
 #define JOIN_COMMAND "join"
+#define LEAVE_COMMAND "leave"
 #define CONNECT_COMMAND "connect"
 #define DISCONNECT_COMMAND "disconnect"
 
 typedef struct {
 	int socket;
+	bool connected;
 	bool running;
 	AddrBook *addr_book;
 	Threadpool *threadpool;
@@ -47,7 +54,7 @@ typedef struct {
 	char buffer[CLIENT_BUF_LEN];
 	struct sockaddr_in ext_addr;
 	struct sockaddr_in server_addr;
-	char name[256];
+	char *name;
 } ClientThreadData;
 
 typedef struct {
@@ -55,7 +62,7 @@ typedef struct {
 	ChatMessage *msg;
 } PingData;
 
-int client_init(ChatClient *client, char *env_file, char *username, char *address);
+int client_init(ChatClient *client, char *env_file);
 
 int client_run(ChatClient *client);
 

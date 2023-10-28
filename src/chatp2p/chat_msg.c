@@ -20,11 +20,17 @@
 #include <lib/logger.h>
 #include <string.h>
 
-char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = {
-	"CHAT_MESSAGE_TYPE_TEXT",	 "CHAT_MESSAGE_TYPE_JOIN",	"CHAT_MESSAGE_TYPE_LEAVE",
-	"CHAT_MESSAGE_TYPE_CONNECT", "CHAT_MESSAGE_TYPE_ERROR", "CHAT_MESSAGE_TYPE_INFO",
-	"CHAT_MESSAGE_TYPE_PING",	 "CHAT_MESSAGE_TYPE_PONG",	"CHAT_MESSAGE_TYPE_UNKNOWN"
-};
+char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = { "CHAT_MESSAGE_TYPE_TEXT",
+															 "CHAT_MESSAGE_TYPE_JOIN",
+															 "CHAT_MESSAGE_TYPE_LEAVE",
+															 "CHAT_MESSAGE_TYPE_CONNECT",
+															 "CHAT_MESSAGE_TYPE_CONNECT_RESPONSE",
+															 "CHAT_MESSAGE_TYPE_DISCONNECT",
+															 "CHAT_MESSAGE_TYPE_ERROR",
+															 "CHAT_MESSAGE_TYPE_INFO",
+															 "CHAT_MESSAGE_TYPE_PING",
+															 "CHAT_MESSAGE_TYPE_PONG",
+															 "CHAT_MESSAGE_TYPE_UNKNOWN" };
 
 int chat_msg_header_to_string(char *buffer, const struct chat_msg_header_t *header)
 {
@@ -111,7 +117,7 @@ void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *addr)
 	}
 
 	if (sendto(socket, buffer, len, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) < 0) {
-		LOG_ERR("Failed to send message to client");
+		LOG_ERR("Failed to send message.");
 		return;
 	}
 }

@@ -19,6 +19,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #include <lib/logger.h>
 #include <lib/threadpool.h>
@@ -79,7 +81,9 @@ static void *start_worker_thread(void *arg)
 		pthread_mutex_unlock(&data->cond_var->cond_lock);
 
 		if (ret && data->cond_var->cond_predicate) {
-			usleep(item.sleep_time);
+			struct timeval tv;
+			tv.tv_sec = item.sleep_time;
+			select(0, NULL, NULL, NULL, &tv);
 			item.func(item.arg);
 		} else {
 			pthread_exit(NULL);
