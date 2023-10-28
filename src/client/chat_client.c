@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2023 Nicolai Brand
+ *  Copyright (C) 2023 Callum Gran
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,25 +15,30 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#include <client/client.h>
+#include <lib/logger.h>
 
-#include <stdio.h>
+int main(int argc, char **argv)
+{
+	if (argc != 3) {
+		LOG_ERR("Usage: %s <username> <address>", argv[0]);
+		return -1;
+	}
+	char *username = argv[1];
+	char *address = argv[2];
+	ChatClient client;
+	if (client_init(&client, ".env", username, address) == -1) {
+		LOG_ERR("Failed to initialize server, exiting...");
+		return -1;
+	}
 
-#define LOG_INFO(...)                         \
-	({                                        \
-		fprintf(stdout, "\033[0;33m[LOG]: "); \
-		fprintf(stdout, __VA_ARGS__);         \
-		fprintf(stdout, "\033[0m\n");         \
-		fflush(stdout);					   	  \
-	})
+	if (client_run(&client) == -1) {
+		LOG_ERR("Failed to run server, exiting...");
+		client_free(&client);
+		return -1;
+	}
 
-#define LOG_ERR(...)                          \
-	({                                        \
-		fprintf(stderr, "\033[0;31m[ERR]: "); \
-		fprintf(stderr, __VA_ARGS__);         \
-		fprintf(stderr, "\033[0m\n");         \
-		fflush(stderr);					   	  \
-	})
+	client_free(&client);
 
-#endif
+	return 0;
+}

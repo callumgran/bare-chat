@@ -33,7 +33,7 @@ debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
 client:
-	$(CC) $(CFLAGS) -o $(CLIENT) src/client/test_client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c
+	$(CC) $(CFLAGS) -o $(CLIENT) src/client/chat_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/client/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c
 
 clean:
 	rm -rf $(OBJDIR) $(TARGET) $(CLIENT)

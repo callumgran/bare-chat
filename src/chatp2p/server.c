@@ -105,8 +105,19 @@ static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *c
 static void chat_msg_info_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 								  AddrBook *addrs, int socket)
 {
-	// TODO: This will be how clients receive info from the server (e.g. address book, server ip,
-	// etc.)
+	if (!addr_book_contains(addrs, client_addr)) {
+		LOG_INFO("Client not in address book");
+		return;
+	}
+	char buf[4096] = { 0 };
+	bool ret = addr_book_to_string(buf, addrs, client_addr);
+
+	if (!ret) {
+		LOG_ERR("Could not convert address book to string");
+		return;
+	}
+
+	chat_msg_send_text(buf, socket, client_addr);
 }
 
 static void chat_msg_ping_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
@@ -131,11 +142,6 @@ static void chat_msg_ping_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	LOG_INFO("Sent PONG message to client %s", addr_str);
 }
 
-static void chat_msg_pong_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
-								  AddrBook *addrs, int socket)
-{
-	// TODO: This will be how clients respond to pings from the server
-}
 
 static void chat_msg_unknown_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 									 AddrBook *addrs, int socket)
@@ -231,7 +237,7 @@ int server_init(ChatServer *server, char *env_file)
 	}
 
 	int threads = atoi(env_get_val(env_vars, "SERVER_THREADS"));
-	int queue_size = atoi(env_get_val(env_vars, "REQUEST_QUEUE_SIZE"));
+	int queue_size = atoi(env_get_val(env_vars, "SERVER_QUEUE_SIZE"));
 
 	server->threadpool = malloc(sizeof(Threadpool));
 	threadpool_init(server->threadpool, threads, queue_size);

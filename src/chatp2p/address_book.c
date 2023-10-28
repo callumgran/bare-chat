@@ -218,6 +218,23 @@ bool addr_book_contains(const AddrBook *addr_book, const struct sockaddr_in *add
 	return false;
 }
 
+AddrEntry *addr_book_find(const AddrBook *addr_book, const struct sockaddr_in *addr)
+{
+	if (addr_book == NULL || addr == NULL)
+		return NULL;
+
+	AddrEntry *node = addr_book->head;
+
+	while (node != NULL) {
+		if (addr_eq(&node->addr, addr))
+			return node;
+
+		node = node->next;
+	}
+
+	return NULL;
+}
+
 bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockaddr_in *client_addr)
 {
 	if (buffer == NULL || addr_book == NULL || client_addr == NULL)

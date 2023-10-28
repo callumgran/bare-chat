@@ -58,6 +58,8 @@ bool addr_book_remove(AddrBook *list, const struct sockaddr_in *addr);
 
 bool addr_book_contains(const AddrBook *list, const struct sockaddr_in *addr);
 
+AddrEntry *addr_book_find(const AddrBook *list, const struct sockaddr_in *addr);
+
 bool addr_book_to_string(char *buffer, AddrBook *list, const struct sockaddr_in *client_addr);
 
 void addr_book_foreach(AddrBook *dll, void (*exec)(void *, void *), void *args);

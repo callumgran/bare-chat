@@ -1,11 +1,11 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
-#include <stdbool.h>
 #include <unistd.h>
 
 #include <chatp2p/address_book.h>
@@ -143,8 +143,8 @@ int main(int argc, char **argv)
 	ret = pthread_create(&keepalive_pid, NULL, &ping_loop, NULL);
 	ret = pthread_create(&receive_pid, NULL, &receive_loop, NULL);
 
-    pthread_join(receive_pid, NULL);
-    pthread_join(keepalive_pid, NULL);
+	pthread_join(receive_pid, NULL);
+	pthread_join(keepalive_pid, NULL);
 
 	close(g_clientfd);
 	addr_book_free(g_peers);

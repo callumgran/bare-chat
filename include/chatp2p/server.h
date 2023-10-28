@@ -22,7 +22,7 @@
 #include <lib/logger.h>
 #include <lib/threadpool.h>
 
-#define SERVER_BUF_LEN 4096
+#define SERVER_BUF_LEN 65536
 
 typedef struct {
 	int socket;
