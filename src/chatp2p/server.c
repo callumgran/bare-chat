@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <sys/select.h>
 
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
@@ -279,6 +280,16 @@ void server_free(ChatServer *server)
 	LOG_INFO("Server freed and closed.");
 }
 
+static bool check_fd(int nfds, int client_fd, fd_set *readfds)
+{
+	FD_ZERO(readfds);
+	FD_SET(client_fd, readfds);
+	struct timeval timeout;
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+	return select(nfds, readfds, NULL, NULL, &timeout) > 0;
+}
+
 int server_run(ChatServer *server)
 {
 	struct sockaddr_in client_address = { 0 };
@@ -294,8 +305,20 @@ int server_run(ChatServer *server)
 
 	set_nonblocking(server->socket);
 
+	int nfds = server->socket + 1;
+	fd_set readfds;
+
+	set_nonblocking(nfds);
+	char buffer[65536] = { 0 };
+
 	while (server->running) {
-		char buffer[4096] = { 0 };
+
+		if (!check_fd(nfds, server->socket, &readfds))
+			continue;
+
+		memset(buffer, 0, sizeof(buffer));
+		memset(&client_address, 0, sizeof(struct sockaddr_in));
+		
 		ssize_t recv_len = recvfrom(server->socket, buffer, sizeof(buffer), 0,
 									(struct sockaddr *)&client_address, &len);
 
