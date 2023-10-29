@@ -72,6 +72,8 @@ typedef struct chat_msg_t {
 
 extern char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT];
 
+void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key, char *body);
+
 ssize_t chat_msg_from_string(ChatMessage *msg, const char *buffer, size_t len);
 
 ssize_t chat_msg_to_string(const ChatMessage *msg, char *buffer, size_t len);

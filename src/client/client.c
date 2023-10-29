@@ -58,9 +58,8 @@ static void send_ping_to_addr(void *arg, void *data)
 {
 	AddrEntry *addr = arg;
 	PingData *pd = data;
-	char buf[1024];
+	char buf[20];
 	addr_to_string(buf, &addr->addr);
-	// LOG_INFO("Pinging to %s", buf);
 	chat_msg_send(pd->msg, pd->socket, &addr->addr);
 }
 
@@ -68,11 +67,9 @@ static void ping_loop(void *arg)
 {
 	ChatClient *data = (ChatClient *)arg;
 	ChatMessage ping;
-	ping.header.server_key = SERVER_KEY;
-	ping.header.type = CHAT_MESSAGE_TYPE_PING;
-	ping.header.len = 0;
-	ping.body = NULL;
-	uint32_t i = 61;
+	chat_msg_init(&ping, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+
+	uint32_t i = 0;
 
 	while (data->running) {
 		if (!data->connected) {
@@ -84,6 +81,7 @@ static void ping_loop(void *arg)
 			sleep_seconds(1);
 			continue;
 		}
+
 		i = 0;
 		chat_msg_send(&ping, data->socket, &data->server_addr);
 		if (!addr_book_empty(data->addr_book)) {
@@ -93,8 +91,6 @@ static void ping_loop(void *arg)
 			addr_book_foreach(data->addr_book, send_ping_to_addr, &pd);
 		}
 	}
-
-	LOG_INFO("Quitting ping loop...");
 }
 
 static bool string_eq(const char *fst, const char *snd)
@@ -107,10 +103,7 @@ static bool string_eq(const char *fst, const char *snd)
 static void handle_leave_command(ChatClient *data)
 {
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_LEAVE;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_LEAVE, 0, SERVER_KEY, NULL);
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 	data->connected = false;
 	LOG_INFO("Disconnected from server");
@@ -119,10 +112,7 @@ static void handle_leave_command(ChatClient *data)
 static void handle_info_command(ChatClient *data)
 {
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_INFO;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_INFO, 0, SERVER_KEY, NULL);
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 }
 
@@ -150,14 +140,11 @@ static void handle_join_command(ChatClient *data)
 	}
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_JOIN;
-	msg.header.len = strlen(data->name);
-	msg.body = data->name;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_JOIN, strlen(data->name), SERVER_KEY, data->name);
+	
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
-	data->connected = false;
 	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected,
 							   CLIENT_JOIN_TIMEOUT);
 }
@@ -178,19 +165,17 @@ static void handle_connect_command(ChatClient *data)
 		return;
 	}
 
-	char body[INET_ADDRSTRLEN + 5];
+	char body[INET_ADDRSTRLEN + 6];
 	addr_to_string(body, &ext_addr);
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_CONNECT;
-	msg.body = body;
-	msg.header.len = INET_ADDRSTRLEN + 5;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, INET_ADDRSTRLEN + 5, SERVER_KEY, body);
 
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 	// Send connect message to other user at the same time to utilize UDP hole punching
+	// TODO: This is a hacky solution, find a better way to do this
 	chat_msg_send_text(NULL, data->socket, &ext_addr);
 }
 
@@ -218,10 +203,7 @@ static void handle_disconnect_command(ChatClient *data)
 	addr_book_remove(data->addr_book, &ext_addr);
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
 	LOG_INFO("Sending disconnect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &ext_addr);
@@ -284,7 +266,6 @@ static void handle_msg_command(ChatClient *data)
 	}
 
 	chat_msg_send_text(msg, data->socket, &ext_addr);
-	// LOG_INFO("Message sent to %s", entry->name);
 }
 
 static void handle_ping_command(ChatClient *data)
@@ -304,10 +285,8 @@ static void handle_ping_command(ChatClient *data)
 	}
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_PING;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+
 	LOG_INFO("Sending ping message to other address %s...\n", addr);
 	chat_msg_send(&msg, data->socket, &ext_addr);
 }
@@ -318,10 +297,7 @@ static void disconnect_all_connections(void *data, void *arg)
 	ChatClient *client = arg;
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
 
 	chat_msg_send(&msg, client->socket, &entry->addr);
 	addr_book_remove(client->addr_book, &entry->addr);
@@ -424,10 +400,8 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	addr_book_push_back(data->addr_book, &ext_addr, name);
 
 	ChatMessage connect = { 0 };
-	connect.header.server_key = SERVER_KEY;
-	connect.header.type = CHAT_MESSAGE_TYPE_CONNECT_RESPONSE;
-	connect.header.len = strlen(data->name);
-	connect.body = data->name;
+	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, strlen(data->name), SERVER_KEY,
+				  data->name);
 
 	chat_msg_send(&connect, data->socket, &ext_addr);
 }
@@ -500,17 +474,10 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 
 	clock_gettime(CLOCK_MONOTONIC, &entry->last_seen);
 
-	// LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
-
 	ChatMessage pong = { 0 };
-	pong.header.server_key = SERVER_KEY;
-	pong.header.type = CHAT_MESSAGE_TYPE_PONG;
-	pong.header.len = 0;
-	pong.body = NULL;
+	chat_msg_init(&pong, CHAT_MESSAGE_TYPE_PONG, 0, SERVER_KEY, NULL);
 
 	chat_msg_send(&pong, data->socket, &data->ext_addr);
-
-	// LOG_INFO("Sent PONG message to %s : %s", entry->name, addr_str);
 }
 
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
@@ -632,7 +599,7 @@ void client_free(ChatClient *client)
 	addr_book_free(client->addr_book);
 	free(client->threadpool);
 	free(client->addr_book);
-	LOG_INFO("client freed and closed.");
+	LOG_INFO("Client freed and closed.");
 }
 
 int client_run(ChatClient *client)

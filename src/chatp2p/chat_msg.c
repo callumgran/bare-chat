@@ -29,6 +29,25 @@ char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = {
 	"CHAT_MESSAGE_TYPE_PONG",		   "CHAT_MESSAGE_TYPE_UNKNOWN"
 };
 
+void chat_msg_header_init(struct chat_msg_header_t *header, ChatMessageType type, uint16_t len, uint32_t server_key)
+{
+	if (header == NULL)
+		return;
+
+	header->type = type;
+	header->len = len;
+	header->server_key = server_key;
+}
+
+void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key, char *body)
+{
+	if (msg == NULL)
+		return;
+
+	chat_msg_header_init(&msg->header, type, len, server_key);
+	msg->body = body;
+}
+
 int chat_msg_header_to_string(char *buffer, const struct chat_msg_header_t *header)
 {
 	return sprintf(buffer, "Chat message header:\n\tType: %s\n\tLength: %d\n\tServer key: %d\n",

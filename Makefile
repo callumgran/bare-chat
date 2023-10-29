@@ -10,7 +10,7 @@ OBJS := $(SRCS:%.c=$(OBJDIR)/%.o)
 CFLAGS = -Iinclude -Wall -Wextra -Wshadow -std=c11 -g -D_POSIX_C_SOURCE=200809L
 CFLAGS += -DLOGGING
 LDFLAGS = -pthread
-LDLIBS = -lm
+LDLIBS = -lm -lssl -lcrypto
 
 .PHONY: format clean tags bear $(OBJDIR)
 TARGET = server
