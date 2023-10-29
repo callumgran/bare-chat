@@ -6,9 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <sys/select.h>
 
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
@@ -56,16 +56,18 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 		return;
 	}
 
-	char retbuf[10 + strlen(msg->body) + 1];
-	sprintf(retbuf, "Welcome, %s!", msg->body);
+	ChatMessage response = { 0 };
+	response.header.server_key = SERVER_KEY;
+	response.header.type = CHAT_MESSAGE_TYPE_JOIN_RESPONSE;
+	response.header.len = 0;
+	response.body = NULL;
 
-	chat_msg_send_text(retbuf, socket, client_addr);
+	chat_msg_send(&response, socket, client_addr);
 
 	LOG_INFO("Client %s with nickname %s joined the server", addr_str, msg->body);
 }
 
-static void chat_msg_leave_handler(struct sockaddr_in *client_addr,
-								   AddrBook *addrs, int socket)
+static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
 		LOG_INFO("Client not in address book");
@@ -73,7 +75,7 @@ static void chat_msg_leave_handler(struct sockaddr_in *client_addr,
 	}
 
 	AddrEntry *entry = addr_book_find(addrs, client_addr);
-	
+
 	char addr_str[INET_ADDRSTRLEN];
 	if (addr_to_string(addr_str, client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
@@ -96,8 +98,7 @@ static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *c
 	(void)msg;
 }
 
-static void chat_msg_info_handler(struct sockaddr_in *client_addr,
-								  AddrBook *addrs, int socket)
+static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
 		LOG_INFO("Client not in address book");
@@ -105,20 +106,23 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr,
 	}
 
 	char buf[4096] = { 0 };
-	bool ret = addr_book_to_string(buf, addrs, client_addr);
 
-	LOG_INFO("Sending address book to client");
+	if (addrs->size == 1) {
+		strncpy(buf, "Address book is empty.", sizeof(buf));
+	} else {
+		bool ret = addr_book_to_string(buf, addrs, client_addr);
 
-	if (!ret) {
-		LOG_ERR("Could not convert address book to string");
-		return;
+		if (!ret) {
+			LOG_ERR("Could not convert address book to string");
+			return;
+		}
 	}
 
+	LOG_INFO("Sending address book to client");
 	chat_msg_send_text(buf, socket, client_addr);
 }
 
-static void chat_msg_ping_handler(struct sockaddr_in *client_addr,
-								  AddrBook *addrs, int socket)
+static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
 {
 	char addr_str[INET_ADDRSTRLEN];
 	if (addr_to_string(addr_str, client_addr) < 0) {
@@ -177,6 +181,10 @@ static void chat_msg_handler(const ChatMessage *msg, struct sockaddr_in *client_
 		break;
 	case CHAT_MESSAGE_TYPE_JOIN:
 		chat_msg_join_handler(msg, client_addr, addrs, socket);
+		break;
+	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
+		LOG_ERR(
+			"Received JOIN_RESPONSE message from client, server doesn't send JOIN messages to clients");
 		break;
 	case CHAT_MESSAGE_TYPE_LEAVE:
 		chat_msg_leave_handler(client_addr, addrs, socket);
@@ -312,13 +320,12 @@ int server_run(ChatServer *server)
 	char buffer[65536] = { 0 };
 
 	while (server->running) {
-
 		if (!check_fd(nfds, server->socket, &readfds))
 			continue;
 
 		memset(buffer, 0, sizeof(buffer));
 		memset(&client_address, 0, sizeof(struct sockaddr_in));
-		
+
 		ssize_t recv_len = recvfrom(server->socket, buffer, sizeof(buffer), 0,
 									(struct sockaddr *)&client_address, &len);
 

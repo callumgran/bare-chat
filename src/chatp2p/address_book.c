@@ -263,7 +263,7 @@ bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockadd
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 
-	offset += sprintf(buffer + offset, "Address Book:\n ");
+	offset += sprintf(buffer + offset, "Address Book:\n");
 	while (node != NULL) {
 		// Remove nodes that haven't been seen in 5 minutes from the address book
 		if (now.tv_sec - node->last_seen.tv_sec > 300) {

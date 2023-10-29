@@ -126,6 +126,14 @@ static void handle_info_command(ChatClient *data)
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 }
 
+static void check_client_connected(void *arg)
+{
+	bool *connected = arg;
+	if (!*connected) {
+		LOG_ERR("Connection failed, check server address and try again.");
+	}
+}
+
 static void handle_join_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -149,7 +157,9 @@ static void handle_join_command(ChatClient *data)
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
-	data->connected = true;
+	data->connected = false;
+	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected,
+							   CLIENT_JOIN_TIMEOUT);
 }
 
 static void handle_connect_command(ChatClient *data)
@@ -220,7 +230,7 @@ static void handle_list_command(ChatClient *data)
 		return;
 	}
 
-	char buffer[1024] = { 0 };
+	char buffer[4096] = { 0 };
 
 	addr_book_to_string(buffer, data->addr_book, NULL);
 	LOG_INFO("%s", buffer);
@@ -433,7 +443,9 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 
 	chat_msg_send_text("Howdy new partner!", data->socket, &data->ext_addr);
 
-	LOG_INFO("Client %s with nickname %s received your connection request, you can now communicate by name :)", addr_str, msg->body);
+	LOG_INFO(
+		"Client %s with nickname %s received your connection request, you can now communicate by name :)",
+		addr_str, msg->body);
 }
 
 static void chat_msg_disconnect_handler(ClientThreadData *data)
@@ -452,6 +464,12 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
 	LOG_INFO("Client %s with nickname %s closed their connection to you", addr_str, entry->name);
 	addr_book_remove(data->addr_book, &data->ext_addr);
+}
+
+static void chat_msg_join_response_handler(ClientThreadData *data)
+{
+	*(data->connected) = true;
+	LOG_INFO("Successfully connected to server");
 }
 
 static void chat_msg_ping_handler(ClientThreadData *data)
@@ -491,15 +509,15 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	(void) msg;
-	(void) data;
+	(void)msg;
+	(void)data;
 	LOG_ERR("Unknown message type");
 }
 
 static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	(void) msg;
-	(void) data;
+	(void)msg;
+	(void)data;
 	// TODO: This will be how clients receive errors from the server
 }
 
@@ -527,6 +545,9 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 		break;
 	case CHAT_MESSAGE_TYPE_DISCONNECT:
 		chat_msg_disconnect_handler(data);
+		break;
+	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
+		chat_msg_join_response_handler(data);
 		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, data);
@@ -557,6 +578,8 @@ static void handle_receive_msg(void *arg)
 	}
 
 	chat_msg_handler(&msg, data);
+
+	free(data);
 }
 
 static bool check_fd(int nfds, int client_fd, fd_set *readfds)
@@ -578,6 +601,10 @@ int client_init(ChatClient *client, char *env_file)
 		LOG_ERR("Could not create socket");
 		return -1;
 	}
+
+	client->running = false;
+	client->connected = false;
+	memcpy(client->name, env_get_val(env_vars, "CLIENT_DEFAULT_NAME"), 256);
 
 	int threads = atoi(env_get_val(env_vars, "CLIENT_THREADS"));
 	int queue_size = atoi(env_get_val(env_vars, "CLIENT_QUEUE_SIZE"));
@@ -622,11 +649,6 @@ int client_run(ChatClient *client)
 	set_nonblocking(nfds);
 
 	while (client->running) {
-		if (!client->connected) {
-			sleep_seconds(1);
-			continue;
-		}
-
 		if (!check_fd(nfds, client->socket, &readfds))
 			continue;
 
@@ -639,6 +661,7 @@ int client_run(ChatClient *client)
 		if (recv_len > 0) {
 			ClientThreadData *data = malloc(sizeof(ClientThreadData));
 			data->running = &client->running;
+			data->connected = &client->connected;
 			memcpy(data->buffer, buffer, sizeof(buffer));
 			data->len = recv_len;
 			memcpy(&data->ext_addr, &ext_addr, sizeof(struct sockaddr_in));
