@@ -94,7 +94,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in 
 	if (!addr_book_contains(addrs, client_addr)) {
 		LOG_ERR("Client not in address book tried to connect to a client");
 	}
-	
+
 	if (msg->body == NULL) {
 		LOG_ERR("Could not parse CONNECT message");
 		return;
