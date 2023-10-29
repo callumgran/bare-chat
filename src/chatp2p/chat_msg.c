@@ -121,12 +121,12 @@ void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *addr)
 
 void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr)
 {
-	if (text == NULL || addr == NULL)
+	if (addr == NULL)
 		return;
 
 	ChatMessage msg = { 0 };
 	msg.header.type = CHAT_MESSAGE_TYPE_TEXT;
-	msg.header.len = strlen(text);
+	msg.header.len = text == NULL ? 0 : strlen(text);
 	msg.header.server_key = SERVER_KEY;
 	msg.body = text;
 

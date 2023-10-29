@@ -178,15 +178,20 @@ static void handle_connect_command(ChatClient *data)
 		return;
 	}
 
+	char body[INET_ADDRSTRLEN + 5];
+	addr_to_string(body, &ext_addr);
+
 	ChatMessage msg = { 0 };
 	msg.header.server_key = SERVER_KEY;
 	msg.header.type = CHAT_MESSAGE_TYPE_CONNECT;
-	msg.header.len = strlen(data->name);
-	msg.body = data->name;
+	msg.body = body;
+	msg.header.len = INET_ADDRSTRLEN + 5;
+
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
-	chat_msg_send(&msg, data->socket, &ext_addr);
-	LOG_INFO("The other user should now be able to send you messages");
+	chat_msg_send(&msg, data->socket, &data->server_addr);
+	// Send connect message to other user at the same time to utilize UDP hole punching
+	chat_msg_send_text(NULL, data->socket, &ext_addr);
 }
 
 static void handle_disconnect_command(ChatClient *data)
@@ -402,20 +407,21 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	if (addr_book_contains(data->addr_book, &data->ext_addr)) {
+	char *name = strtok(msg->body, "|");
+	char *addr = msg->body + strlen(name) + 1;
+
+	struct sockaddr_in ext_addr = { 0 };
+	if (addr_from_string(&ext_addr, addr) < 0) {
+		LOG_ERR("Invalid address for connect response");
+		return;
+	}
+
+	if (addr_book_contains(data->addr_book, &ext_addr)) {
 		LOG_INFO("Client already in address book");
 		return;
 	}
 
-	char addr_str[INET_ADDRSTRLEN];
-	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
-		LOG_ERR("Could not convert address to string");
-		return;
-	}
-
-	// TODO: Add checks to make sure name of client is not to long etc, names should also be unique
-
-	addr_book_push_back(data->addr_book, &data->ext_addr, msg->body);
+	addr_book_push_back(data->addr_book, &ext_addr, name);
 
 	ChatMessage connect = { 0 };
 	connect.header.server_key = SERVER_KEY;
@@ -423,7 +429,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	connect.header.len = strlen(data->name);
 	connect.body = data->name;
 
-	chat_msg_send(&connect, data->socket, &data->ext_addr);
+	chat_msg_send(&connect, data->socket, &ext_addr);
 }
 
 static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThreadData *data)
