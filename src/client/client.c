@@ -157,7 +157,8 @@ static void handle_join_command(ChatClient *data)
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
-	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected, 15);
+	data->connected = false;
+	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected, CLIENT_JOIN_TIMEOUT);
 }
 
 static void handle_connect_command(ChatClient *data)
@@ -228,7 +229,7 @@ static void handle_list_command(ChatClient *data)
 		return;
 	}
 
-	char buffer[1024] = { 0 };
+	char buffer[4096] = { 0 };
 
 	addr_book_to_string(buffer, data->addr_book, NULL);
 	LOG_INFO("%s", buffer);
@@ -598,6 +599,10 @@ int client_init(ChatClient *client, char *env_file)
 		return -1;
 	}
 
+	client->running = false;
+	client->connected = false;
+	memcpy(client->name, env_get_val(env_vars, "CLIENT_DEFAULT_NAME"), 256);
+
 	int threads = atoi(env_get_val(env_vars, "CLIENT_THREADS"));
 	int queue_size = atoi(env_get_val(env_vars, "CLIENT_QUEUE_SIZE"));
 
@@ -641,11 +646,6 @@ int client_run(ChatClient *client)
 	set_nonblocking(nfds);
 
 	while (client->running) {
-		if (!client->connected) {
-			sleep_seconds(1);
-			continue;
-		}
-
 		if (!check_fd(nfds, client->socket, &readfds))
 			continue;
 

@@ -24,7 +24,8 @@
 
 #define CLIENT_BUF_LEN 65536
 
-#define CLIENT_PING_INTERVAL 60 // Iterations
+#define CLIENT_PING_INTERVAL 30 // Iterations
+#define CLIENT_JOIN_TIMEOUT 5 // Seconds
 
 #define CLIENT_HELP_MSG \
 	"Commands:\n\

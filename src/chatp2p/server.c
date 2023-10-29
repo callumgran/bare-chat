@@ -56,15 +56,13 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 		return;
 	}
 
-	chat_msg_send_text("Welcome!", socket, client_addr);
+	ChatMessage response = { 0 };
+	response.header.server_key = SERVER_KEY;
+	response.header.type = CHAT_MESSAGE_TYPE_JOIN_RESPONSE;
+	response.header.len = 0;
+	response.body = NULL;
 
-	// ChatMessage response = { 0 };
-	// response.header.server_key = SERVER_KEY;
-	// response.header.type = CHAT_MESSAGE_TYPE_JOIN_RESPONSE;
-	// response.header.len = 0;
-	// response.body = NULL;
-
-	// chat_msg_send(&response, socket, client_addr);
+	chat_msg_send(&response, socket, client_addr);
 
 	LOG_INFO("Client %s with nickname %s joined the server", addr_str, msg->body);
 }
@@ -110,15 +108,19 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr,
 	}
 
 	char buf[4096] = { 0 };
-	bool ret = addr_book_to_string(buf, addrs, client_addr);
 
-	LOG_INFO("Sending address book to client");
+	if (addrs->size == 1) {
+		strncpy(buf, "Address book is empty.", sizeof(buf));
+	} else {
+		bool ret = addr_book_to_string(buf, addrs, client_addr);
 
-	if (!ret) {
-		LOG_ERR("Could not convert address book to string");
-		return;
+		if (!ret) {
+			LOG_ERR("Could not convert address book to string");
+			return;
+		}
 	}
 
+	LOG_INFO("Sending address book to client");
 	chat_msg_send_text(buf, socket, client_addr);
 }
 
