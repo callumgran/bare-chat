@@ -150,7 +150,6 @@ static void handle_join_command(ChatClient *data)
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 	data->connected = true;
-	LOG_INFO("Connected to server");
 }
 
 static void handle_connect_command(ChatClient *data)
@@ -270,7 +269,7 @@ static void handle_msg_command(ChatClient *data)
 	}
 
 	chat_msg_send_text(msg, data->socket, &ext_addr);
-	LOG_INFO("Message sent to %s", entry->name);
+	// LOG_INFO("Message sent to %s", entry->name);
 }
 
 static void handle_ping_command(ChatClient *data)
@@ -305,7 +304,7 @@ static void user_command_loop(void *arg)
 	print_help();
 	char buf[1024] = { 0 };
 	while (data->running) {
-		if (fprintf(stdout, "> ") && fgets(buf, sizeof(buf), stdin) != NULL) {
+		if (fgets(buf, sizeof(buf), stdin) != NULL) {
 			char *command = strtok(buf, " ");
 			if (command == NULL) {
 				print_help();
@@ -370,10 +369,10 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 		return;
 	}
 
-	LOG_INFO("-------------------------------------------------------");
-	LOG_INFO("Received message from %s : %s", name, addr_str);
-	LOG_INFO("Message: %s", msg->body);
-	LOG_INFO("-------------------------------------------------------");
+	LOG_MSG("-------------------------------------------------------");
+	LOG_MSG("Received message from %s : %s", name, addr_str);
+	LOG_MSG("Message: %s", msg->body);
+	LOG_MSG("-------------------------------------------------------");
 }
 
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
@@ -398,7 +397,6 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	connect.header.type = CHAT_MESSAGE_TYPE_CONNECT_RESPONSE;
 	connect.header.len = strlen(data->name);
 	connect.body = data->name;
-	printf("Connect.body: %s\n", connect.body);
 
 	chat_msg_send(&connect, data->socket, &data->ext_addr);
 }
@@ -465,7 +463,7 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 
 	clock_gettime(CLOCK_MONOTONIC, &entry->last_seen);
 
-	LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
+	// LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
 
 	ChatMessage pong = { 0 };
 	pong.header.server_key = SERVER_KEY;
@@ -475,7 +473,7 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 
 	chat_msg_send(&pong, data->socket, &data->ext_addr);
 
-	LOG_INFO("Sent PONG message to %s : %s", entry->name, addr_str);
+	// LOG_INFO("Sent PONG message to %s : %s", entry->name, addr_str);
 }
 
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
@@ -494,8 +492,15 @@ static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *dat
 
 static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	if (msg->header.type < CHAT_MESSAGE_TYPE_COUNT)
-		LOG_INFO("Handling message of type: %s", CHAT_MESSAGE_TYPE_STRINGS[msg->header.type]);
+	if (msg->header.server_key != SERVER_KEY) {
+		LOG_ERR("Invalid key in message received");
+		return;
+	}
+
+	if (msg->header.type >= CHAT_MESSAGE_TYPE_COUNT) {
+		LOG_ERR("Invalid message type");
+		return;
+	}
 
 	switch (msg->header.type) {
 	case CHAT_MESSAGE_TYPE_TEXT:
@@ -593,7 +598,6 @@ int client_run(ChatClient *client)
 
 	client->running = true;
 	set_nonblocking(client->socket);
-	printf("Socket: %d\n", client->socket);
 
 	submit_worker_task(client->threadpool, ping_loop, (void *)client);
 	submit_worker_task(client->threadpool, user_command_loop, (void *)client);

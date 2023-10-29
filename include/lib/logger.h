@@ -36,4 +36,13 @@
 		fflush(stderr);                       \
 	})
 
+#define LOG_MSG(...)                          \
+	({                                        \
+		fprintf(stdout, "\033[0;32m[MSG]: "); \
+		fprintf(stdout, __VA_ARGS__);         \
+		fprintf(stdout, "\033[0m\n");         \
+		fflush(stdout);                       \
+	})
+
+
 #endif
