@@ -88,6 +88,47 @@ static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *ad
 	addr_book_remove(addrs, client_addr);
 }
 
+static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
+									 AddrBook *addrs, int socket)
+{
+	if (!addr_book_contains(addrs, client_addr)) {
+		LOG_ERR("Client not in address book tried to connect to a client");
+	}
+	
+	if (msg->body == NULL) {
+		LOG_ERR("Could not parse CONNECT message");
+		return;
+	}
+
+	struct sockaddr_in addr_in = { 0 };
+	if (addr_from_string(&addr_in, msg->body) < 0) {
+		LOG_ERR("Could not convert address to sockaddr_in");
+		return;
+	}
+
+	if (!addr_book_contains(addrs, &addr_in)) {
+		LOG_ERR("Client not in address book");
+		return;
+	}
+
+	char *sender_name = addr_book_find(addrs, client_addr)->name;
+
+	char body[512] = { 0 };
+	ChatMessage response = { 0 };
+	response.header.server_key = SERVER_KEY;
+	response.header.type = CHAT_MESSAGE_TYPE_CONNECT;
+
+	memcpy(body, sender_name, strlen(sender_name));
+	body[strlen(sender_name)] = '|';
+	addr_to_string(body + strlen(sender_name) + 1, client_addr);
+	body[strlen(body)] = '\0';
+	response.body = body;
+
+	response.header.len = strlen(response.body);
+
+	chat_msg_send(&response, socket, &addr_in);
+}
+
 static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 								   AddrBook *addrs, int socket)
 {
@@ -190,7 +231,7 @@ static void chat_msg_handler(const ChatMessage *msg, struct sockaddr_in *client_
 		chat_msg_leave_handler(client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_CONNECT:
-		LOG_ERR("Received CONNECT message from client, server doesn't connect to clients");
+		chat_msg_connect_handler(msg, client_addr, addrs, socket);
 		break;
 	case CHAT_MESSAGE_TYPE_CONNECT_RESPONSE:
 		LOG_ERR("Received CONNECT_RESPONSE message from client, server doesn't connect to clients");
