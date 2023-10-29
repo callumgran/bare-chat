@@ -78,7 +78,6 @@ EnvVars *env_parse(const char *env)
 			return NULL;
 		}
 
-		LOG_INFO("%d: Key: %s, Value: %s", num_vars + 1, key, value);
 		env_vars->vars[num_vars].key = key;
 		env_vars->vars[num_vars].value = value;
 		num_vars++;
