@@ -60,7 +60,7 @@ static void send_ping_to_addr(void *arg, void *data)
 	PingData *pd = data;
 	char buf[1024];
 	addr_to_string(buf, &addr->addr);
-	LOG_INFO("Pinging to %s", buf);
+	// LOG_INFO("Pinging to %s", buf);
 	chat_msg_send(pd->msg, pd->socket, &addr->addr);
 }
 
@@ -205,8 +205,8 @@ static void handle_disconnect_command(ChatClient *data)
 	ChatMessage msg = { 0 };
 	msg.header.server_key = SERVER_KEY;
 	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
-	msg.header.len = strlen(data->name);
-	msg.body = data->name;
+	msg.header.len = 0;
+	msg.body = NULL;
 	LOG_INFO("Sending disconnect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &ext_addr);
@@ -297,6 +297,21 @@ static void handle_ping_command(ChatClient *data)
 	chat_msg_send(&msg, data->socket, &ext_addr);
 }
 
+static void disconnect_all_connections(void *data, void *arg)
+{
+	AddrEntry *entry = data;
+	ChatClient *client = arg;
+
+	ChatMessage msg = { 0 };
+	msg.header.server_key = SERVER_KEY;
+	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
+	msg.header.len = 0;
+	msg.body = NULL;
+
+	chat_msg_send(&msg, client->socket, &entry->addr);
+	addr_book_remove(client->addr_book, &entry->addr);
+}
+
 static void user_command_loop(void *arg)
 {
 	ChatClient *data = (ChatClient *)arg;
@@ -314,8 +329,8 @@ static void user_command_loop(void *arg)
 			if (string_eq(command, HELP_COMMAND)) {
 				print_help();
 			} else if (string_eq(command, QUIT_COMMAND)) {
-				// Here I need to send a disconnect message to all connected clients
-				// and then exit in the future
+				if (!addr_book_empty(data->addr_book))
+					addr_book_foreach(data->addr_book, disconnect_all_connections, data);
 				if (data->connected)
 					handle_leave_command(data);
 
@@ -421,14 +436,12 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 	LOG_INFO("Client %s with nickname %s received your connection request, you can now communicate by name :)", addr_str, msg->body);
 }
 
-static void chat_msg_disconnect_handler(const ChatMessage *msg, ClientThreadData *data)
+static void chat_msg_disconnect_handler(ClientThreadData *data)
 {
 	if (!addr_book_contains(data->addr_book, &data->ext_addr)) {
 		LOG_INFO("Client not in address book");
 		return;
 	}
-
-	addr_book_remove(data->addr_book, &data->ext_addr);
 
 	char addr_str[INET_ADDRSTRLEN];
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
@@ -436,9 +449,9 @@ static void chat_msg_disconnect_handler(const ChatMessage *msg, ClientThreadData
 		return;
 	}
 
-	chat_msg_send_text("Goodbye!", data->socket, &data->ext_addr);
-
-	LOG_INFO("Client %s with nickname %s closed their connection to you", addr_str, msg->body);
+	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
+	LOG_INFO("Client %s with nickname %s closed their connection to you", addr_str, entry->name);
+	addr_book_remove(data->addr_book, &data->ext_addr);
 }
 
 static void chat_msg_ping_handler(ClientThreadData *data)
@@ -513,7 +526,7 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 		chat_msg_connect_response_handler(msg, data);
 		break;
 	case CHAT_MESSAGE_TYPE_DISCONNECT:
-		chat_msg_disconnect_handler(msg, data);
+		chat_msg_disconnect_handler(data);
 		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, data);
