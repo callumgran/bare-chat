@@ -385,6 +385,6 @@ int server_run(ChatServer *server)
 	LOG_INFO("Shutting down chatp2p server...");
 
 	threadpool_stop(server->threadpool);
-	server_free(server);
+
 	return 0;
 }
