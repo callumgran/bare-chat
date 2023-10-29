@@ -684,6 +684,6 @@ int client_run(ChatClient *client)
 	LOG_INFO("Shutting down chatp2p client...");
 
 	threadpool_stop(client->threadpool);
-	client_free(client);
+
 	return 0;
 }
