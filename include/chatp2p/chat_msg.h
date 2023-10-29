@@ -27,6 +27,7 @@
 typedef enum {
 	CHAT_MESSAGE_TYPE_TEXT = 0, // Used for sending text messages to other clients
 	CHAT_MESSAGE_TYPE_JOIN, // Used for when a client joins the server
+	CHAT_MESSAGE_TYPE_JOIN_RESPONSE, // Used for when a client joins in response to a join message
 	CHAT_MESSAGE_TYPE_LEAVE, // Used for when a client leaves the server
 	CHAT_MESSAGE_TYPE_CONNECT, // Used for when a client connects to a peer
 	CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, // Used for when a client connects in response to a connect

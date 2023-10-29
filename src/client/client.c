@@ -126,6 +126,14 @@ static void handle_info_command(ChatClient *data)
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 }
 
+static void check_client_connected(void *arg)
+{
+	bool *connected = arg;
+	if (!*connected) {
+		LOG_ERR("Connection failed, check server address and try again.");
+	}
+}
+
 static void handle_join_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -149,7 +157,7 @@ static void handle_join_command(ChatClient *data)
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
-	data->connected = true;
+	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected, 15);
 }
 
 static void handle_connect_command(ChatClient *data)
@@ -454,6 +462,12 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 	addr_book_remove(data->addr_book, &data->ext_addr);
 }
 
+static void chat_msg_join_response_handler(ClientThreadData *data)
+{
+	*(data->connected) = true;
+	LOG_INFO("Successfully connected to server");
+}
+
 static void chat_msg_ping_handler(ClientThreadData *data)
 {
 	char addr_str[INET_ADDRSTRLEN];
@@ -528,6 +542,9 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 	case CHAT_MESSAGE_TYPE_DISCONNECT:
 		chat_msg_disconnect_handler(data);
 		break;
+	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
+		chat_msg_join_response_handler(data);
+		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, data);
 		break;
@@ -557,6 +574,8 @@ static void handle_receive_msg(void *arg)
 	}
 
 	chat_msg_handler(&msg, data);
+
+	free(data);
 }
 
 static bool check_fd(int nfds, int client_fd, fd_set *readfds)
@@ -639,6 +658,7 @@ int client_run(ChatClient *client)
 		if (recv_len > 0) {
 			ClientThreadData *data = malloc(sizeof(ClientThreadData));
 			data->running = &client->running;
+			data->connected = &client->connected;
 			memcpy(data->buffer, buffer, sizeof(buffer));
 			data->len = recv_len;
 			memcpy(&data->ext_addr, &ext_addr, sizeof(struct sockaddr_in));

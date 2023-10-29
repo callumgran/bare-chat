@@ -67,6 +67,7 @@ typedef struct {
 	size_t len;
 	int socket;
 	bool *running;
+	bool *connected;
 	AddrBook *addr_book;
 	char buffer[CLIENT_BUF_LEN];
 	struct sockaddr_in ext_addr;

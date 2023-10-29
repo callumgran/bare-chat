@@ -56,10 +56,15 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 		return;
 	}
 
-	char retbuf[10 + strlen(msg->body) + 1];
-	sprintf(retbuf, "Welcome, %s!", msg->body);
+	chat_msg_send_text("Welcome!", socket, client_addr);
 
-	chat_msg_send_text(retbuf, socket, client_addr);
+	// ChatMessage response = { 0 };
+	// response.header.server_key = SERVER_KEY;
+	// response.header.type = CHAT_MESSAGE_TYPE_JOIN_RESPONSE;
+	// response.header.len = 0;
+	// response.body = NULL;
+
+	// chat_msg_send(&response, socket, client_addr);
 
 	LOG_INFO("Client %s with nickname %s joined the server", addr_str, msg->body);
 }
@@ -177,6 +182,9 @@ static void chat_msg_handler(const ChatMessage *msg, struct sockaddr_in *client_
 		break;
 	case CHAT_MESSAGE_TYPE_JOIN:
 		chat_msg_join_handler(msg, client_addr, addrs, socket);
+		break;
+	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
+		LOG_ERR("Received JOIN_RESPONSE message from client, server doesn't send JOIN messages to clients");
 		break;
 	case CHAT_MESSAGE_TYPE_LEAVE:
 		chat_msg_leave_handler(client_addr, addrs, socket);
