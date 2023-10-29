@@ -158,7 +158,8 @@ static void handle_join_command(ChatClient *data)
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 	data->connected = false;
-	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected, CLIENT_JOIN_TIMEOUT);
+	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected,
+							   CLIENT_JOIN_TIMEOUT);
 }
 
 static void handle_connect_command(ChatClient *data)
@@ -442,7 +443,9 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 
 	chat_msg_send_text("Howdy new partner!", data->socket, &data->ext_addr);
 
-	LOG_INFO("Client %s with nickname %s received your connection request, you can now communicate by name :)", addr_str, msg->body);
+	LOG_INFO(
+		"Client %s with nickname %s received your connection request, you can now communicate by name :)",
+		addr_str, msg->body);
 }
 
 static void chat_msg_disconnect_handler(ClientThreadData *data)
@@ -506,15 +509,15 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	(void) msg;
-	(void) data;
+	(void)msg;
+	(void)data;
 	LOG_ERR("Unknown message type");
 }
 
 static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	(void) msg;
-	(void) data;
+	(void)msg;
+	(void)data;
 	// TODO: This will be how clients receive errors from the server
 }
 
