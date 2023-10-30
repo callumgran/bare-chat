@@ -361,6 +361,9 @@ static void handle_msg(void *arg)
 		return;
 	}
 
+	if (msg.body != NULL)
+		free(msg.body);
+
 	LOG_INFO("Completed request from: %s", addr_str);
 
 	free(arg);

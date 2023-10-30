@@ -316,7 +316,7 @@ static void addr_book_next(AddrBookIter *iter)
 
 static bool addr_book_has_next(AddrBookIter *iter)
 {
-	return iter->curr != NULL;
+	return iter->curr->next != NULL;
 }
 
 void *addr_book_get(AddrBookIter *iter)
@@ -329,8 +329,10 @@ void addr_book_foreach(AddrBook *dll, void (*exec)(void *, void *), void *args)
 	AddrBookIter iter;
 	addr_book_start(&iter, dll);
 
-	while (addr_book_has_next(&iter)) {
+	while (true) {
 		exec(addr_book_get(&iter), args);
+		if (!addr_book_has_next(&iter))
+			break;
 		addr_book_next(&iter);
 	}
 }

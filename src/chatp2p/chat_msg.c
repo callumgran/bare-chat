@@ -85,8 +85,12 @@ ssize_t chat_msg_from_string(ChatMessage *msg, const char *buffer, size_t len)
 	if (len < sizeof(struct chat_msg_header_t) + msg->header.len)
 		return -1;
 
-	msg->body = malloc(msg->header.len);
+	if (msg->header.len == 0) {
+		msg->body = NULL;
+		return idx;
+	}
 
+	msg->body = malloc(msg->header.len);
 	memcpy(msg->body, buffer + idx, msg->header.len);
 	idx += msg->header.len;
 
@@ -116,6 +120,10 @@ ssize_t chat_msg_to_string(const ChatMessage *msg, char *buffer, size_t len)
 	idx += sizeof(uint16_t);
 	memcpy(buffer + idx, &server_key, sizeof(uint32_t));
 	idx += sizeof(uint32_t);
+
+	if (msg->body == NULL)
+		return idx;
+	
 	memcpy(buffer + idx, msg->body, msg->header.len);
 	idx += msg->header.len;
 

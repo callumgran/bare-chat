@@ -14,7 +14,9 @@ LDLIBS = -lm -lssl -lcrypto
 
 .PHONY: format clean tags bear $(OBJDIR)
 TARGET = server
+TARGET-FUZZ = server-fuzz
 CLIENT = client
+CLIENT-FUZZ = client-fuzz
 
 all: $(TARGET)
 
@@ -26,14 +28,27 @@ $(TARGET): $(OBJS)
 	@echo [LD] $@
 	@$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+$(TARGET-FUZZ): $(OBJS)
+	@echo [LD] $@
+	@$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 $(OBJDIR):
 	$(foreach dir, $(DIRS), $(shell mkdir -p $(OBJDIR)/$(dir)))
 
 debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
+server-asan: CFLAGS += -fsanitize=address -fsanitize=undefined
+server-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined
+server-asan: $(TARGET-FUZZ)
+
 client:
 	$(CC) $(CFLAGS) -o $(CLIENT) src/client/chat_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/client/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c src/encrypt/encrypt.c $(LDLIBS)
+
+client-asan: CFLAGS += -fsanitize=address -fsanitize=undefined
+client-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined
+
+client-asan: client
 
 clean:
 	rm -rf $(OBJDIR) $(TARGET) $(CLIENT)

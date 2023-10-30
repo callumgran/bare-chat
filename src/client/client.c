@@ -653,6 +653,9 @@ static void handle_receive_msg(void *arg)
 
 	chat_msg_handler(&msg, data);
 
+	if (msg.body != NULL)
+		free(msg.body);
+
 	free(data);
 }
 
@@ -679,7 +682,17 @@ int client_init(ChatClient *client, char *env_file)
 
 	client->running = false;
 	client->connected = false;
-	memcpy(client->name, env_get_val(env_vars, "CLIENT_DEFAULT_NAME"), 256);
+
+	char *name = env_get_val(env_vars, "CLIENT_DEFAULT_NAME");
+	if (name == NULL) {
+		LOG_ERR("Failed to get default name from env file");
+		env_vars_free(env_vars);
+		return -1;
+	}
+
+	memset(client->name, 0, sizeof(client->name));
+	memcpy(client->name, name, strlen(name));
+	client->name[strlen(name)] = '\0';
 
 	int threads = atoi(env_get_val(env_vars, "CLIENT_THREADS"));
 	int queue_size = atoi(env_get_val(env_vars, "CLIENT_QUEUE_SIZE"));
