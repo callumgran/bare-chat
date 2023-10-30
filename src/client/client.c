@@ -19,6 +19,7 @@
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
 #include <client/client.h>
+#include <encrypt/encrypt.h>
 #include <fcntl.h>
 #include <lib/env_parser.h>
 #include <lib/logger.h>
@@ -139,9 +140,18 @@ static void handle_join_command(ChatClient *data)
 		return;
 	}
 
+	char public_key[512] = { 0 };
+
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_JOIN, strlen(data->name), SERVER_KEY, data->name);
-	
+	if (data->key_pair.public_key == NULL) {
+		LOG_ERR("Public key not initialized");
+		return;
+	}
+
+	size_t len = rsa_to_bytes(data->key_pair.public_key, (unsigned char *)public_key);
+
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_JOIN, len, SERVER_KEY, public_key);
+
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
@@ -165,11 +175,13 @@ static void handle_connect_command(ChatClient *data)
 		return;
 	}
 
-	char body[INET_ADDRSTRLEN + 6];
+	char body[INET_ADDRSTRLEN + 6 + 256];
 	addr_to_string(body, &ext_addr);
+	strcat(body, "|");
+	rsa_to_bytes(&data->key_pair.public_key, (unsigned char *)(body + strlen(body)));
 
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, INET_ADDRSTRLEN + 5, SERVER_KEY, body);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, INET_ADDRSTRLEN + 5 + 256, SERVER_KEY, body);
 
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
@@ -397,7 +409,13 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 		return;
 	}
 
-	addr_book_push_back(data->addr_book, &ext_addr, name);
+	if (!addr_book_push_back(data->addr_book, &ext_addr)) {
+		LOG_ERR("Failed to add client to address book");
+		return;
+	}
+
+	AddrEntry *entry = addr_book_find(data->addr_book, &ext_addr);
+	memcpy(entry->name, name, 256);
 
 	ChatMessage connect = { 0 };
 	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, strlen(data->name), SERVER_KEY,
@@ -419,7 +437,14 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 		return;
 	}
 
-	addr_book_push_back(data->addr_book, &data->ext_addr, msg->body);
+	addr_book_push_back(data->addr_book, &data->ext_addr);
+	if (!addr_book_push_back(data->addr_book, &data->ext_addr)) {
+		LOG_ERR("Failed to add client to address book");
+		return;
+	}
+
+	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
+	memcpy(entry->name, msg->body, 256);
 
 	chat_msg_send_text("Howdy new partner!", data->socket, &data->ext_addr);
 
@@ -446,8 +471,22 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 	addr_book_remove(data->addr_book, &data->ext_addr);
 }
 
-static void chat_msg_join_response_handler(ClientThreadData *data)
+static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
+	char buf[1024] = { 0 };
+
+	as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
+
+	memcpy(data->server_key->key, buf, 32);
+	memcpy(data->server_key->init_vect, buf + 32, 16);
+
+	char response[272] = { 0 };
+	int size = s_encrypt_data(data->server_key, (unsigned char *)data->name, strlen(data->name), (unsigned char *)response);
+
+	ChatMessage ret = { 0 };
+	chat_msg_init(&ret, CHAT_MESSAGE_TYPE_NAME, size, SERVER_KEY, response);
+	chat_msg_send(&ret, data->socket, &data->server_addr);
+
 	*(data->connected) = true;
 	LOG_INFO("Successfully connected to server");
 }
@@ -520,7 +559,7 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 		chat_msg_disconnect_handler(data);
 		break;
 	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
-		chat_msg_join_response_handler(data);
+		chat_msg_join_response_handler(msg, data);
 		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, data);
@@ -572,6 +611,7 @@ int client_init(ChatClient *client, char *env_file)
 	client->socket = socket(AF_INET, SOCK_DGRAM, 0);
 	if (client->socket < 0) {
 		LOG_ERR("Could not create socket");
+		env_vars_free(env_vars);
 		return -1;
 	}
 
@@ -588,6 +628,15 @@ int client_init(ChatClient *client, char *env_file)
 	client->addr_book = malloc(sizeof(AddrBook));
 	addr_book_init(client->addr_book);
 
+	char *private_key_path = env_get_val(env_vars, "PRIVATE_KEY_PATH");
+	char *public_key_path = env_get_val(env_vars, "PUBLIC_KEY_PATH");
+
+	if (!key_pair_init(&client->key_pair, public_key_path, private_key_path)) {
+		LOG_ERR("Failed to initialize key pair");
+		env_vars_free(env_vars);
+		return -1;
+	}
+
 	env_vars_free(env_vars);
 
 	return 0;
@@ -597,6 +646,7 @@ void client_free(ChatClient *client)
 {
 	threadpool_free(client->threadpool);
 	addr_book_free(client->addr_book);
+	key_pair_free(&client->key_pair);
 	free(client->threadpool);
 	free(client->addr_book);
 	LOG_INFO("Client freed and closed.");
@@ -642,6 +692,8 @@ int client_run(ChatClient *client)
 			data->socket = client->socket;
 			data->server_addr = client->server_addr;
 			data->name = client->name;
+			data->server_key = &client->server_key;
+			data->key_pair = &client->key_pair;
 			submit_worker_task(client->threadpool, handle_receive_msg, (void *)data);
 		} else {
 			LOG_ERR("recvfrom() failed for some reason");

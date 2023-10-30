@@ -20,16 +20,22 @@
 #include <lib/logger.h>
 #include <string.h>
 
-char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = {
-	"CHAT_MESSAGE_TYPE_TEXT",		   "CHAT_MESSAGE_TYPE_JOIN",
-	"CHAT_MESSAGE_TYPE_JOIN_RESPONSE", "CHAT_MESSAGE_TYPE_LEAVE",
-	"CHAT_MESSAGE_TYPE_CONNECT",	   "CHAT_MESSAGE_TYPE_CONNECT_RESPONSE",
-	"CHAT_MESSAGE_TYPE_DISCONNECT",	   "CHAT_MESSAGE_TYPE_ERROR",
-	"CHAT_MESSAGE_TYPE_INFO",		   "CHAT_MESSAGE_TYPE_PING",
-	"CHAT_MESSAGE_TYPE_PONG",		   "CHAT_MESSAGE_TYPE_UNKNOWN"
-};
+char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = { "CHAT_MESSAGE_TYPE_TEXT",
+															 "CHAT_MESSAGE_TYPE_JOIN",
+															 "CHAT_MESSAGE_TYPE_JOIN_RESPONSE",
+															 "CHAT_MESSAGE_TYPE_NAME",
+															 "CHAT_MESSAGE_TYPE_LEAVE",
+															 "CHAT_MESSAGE_TYPE_CONNECT",
+															 "CHAT_MESSAGE_TYPE_CONNECT_RESPONSE",
+															 "CHAT_MESSAGE_TYPE_DISCONNECT",
+															 "CHAT_MESSAGE_TYPE_ERROR",
+															 "CHAT_MESSAGE_TYPE_INFO",
+															 "CHAT_MESSAGE_TYPE_PING",
+															 "CHAT_MESSAGE_TYPE_PONG",
+															 "CHAT_MESSAGE_TYPE_UNKNOWN" };
 
-void chat_msg_header_init(struct chat_msg_header_t *header, ChatMessageType type, uint16_t len, uint32_t server_key)
+void chat_msg_header_init(struct chat_msg_header_t *header, ChatMessageType type, uint16_t len,
+						  uint32_t server_key)
 {
 	if (header == NULL)
 		return;
@@ -39,7 +45,8 @@ void chat_msg_header_init(struct chat_msg_header_t *header, ChatMessageType type
 	header->server_key = server_key;
 }
 
-void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key, char *body)
+void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key,
+				   char *body)
 {
 	if (msg == NULL)
 		return;

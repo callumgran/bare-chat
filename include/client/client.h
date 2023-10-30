@@ -20,6 +20,7 @@
 
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
+#include <encrypt/encrypt.h>
 #include <lib/threadpool.h>
 
 #define CLIENT_BUF_LEN 65536
@@ -62,6 +63,8 @@ typedef struct {
 	Threadpool *threadpool;
 	char name[256];
 	struct sockaddr_in server_addr;
+	SymmetricKey server_key;
+	KeyPair key_pair;
 } ChatClient;
 
 typedef struct {
@@ -74,6 +77,8 @@ typedef struct {
 	struct sockaddr_in ext_addr;
 	struct sockaddr_in server_addr;
 	char *name;
+	SymmetricKey *server_key;
+	KeyPair *key_pair;
 } ClientThreadData;
 
 typedef struct {

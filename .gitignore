@@ -15,3 +15,7 @@ client
 # ignore soydev editor
 .vscode/*
 .vscode/**/*
+
+# ignore key files
+keys/*
+keys

@@ -28,6 +28,7 @@ typedef enum {
 	CHAT_MESSAGE_TYPE_TEXT = 0, // Used for sending text messages to other clients
 	CHAT_MESSAGE_TYPE_JOIN, // Used for when a client joins the server
 	CHAT_MESSAGE_TYPE_JOIN_RESPONSE, // Used for when a client joins in response to a join message
+	CHAT_MESSAGE_TYPE_NAME, // Used for when a client changes their name
 	CHAT_MESSAGE_TYPE_LEAVE, // Used for when a client leaves the server
 	CHAT_MESSAGE_TYPE_CONNECT, // Used for when a client connects to a peer
 	CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, // Used for when a client connects in response to a connect
@@ -72,7 +73,8 @@ typedef struct chat_msg_t {
 
 extern char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT];
 
-void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key, char *body);
+void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key,
+				   char *body);
 
 ssize_t chat_msg_from_string(ChatMessage *msg, const char *buffer, size_t len);
 

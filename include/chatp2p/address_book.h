@@ -17,6 +17,7 @@
 #ifndef ADDRESS_BOOK_H
 #define ADDRESS_BOOK_H
 
+#include <encrypt/encrypt.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -31,6 +32,7 @@ typedef struct address_book_entry_t {
 	struct timespec last_seen;
 	struct address_book_entry_t *prev;
 	struct address_book_entry_t *next;
+	SymmetricKey key;
 } AddrEntry;
 
 typedef struct address_book_t {
@@ -56,7 +58,7 @@ bool addr_book_free(AddrBook *list);
 
 bool addr_book_empty(const AddrBook *list);
 
-bool addr_book_push_back(AddrBook *list, struct sockaddr_in *addr, const char *name);
+bool addr_book_push_back(AddrBook *list, struct sockaddr_in *addr);
 
 bool addr_book_remove(AddrBook *list, const struct sockaddr_in *addr);
 

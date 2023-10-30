@@ -18,24 +18,29 @@
 #ifndef ENCRYPT_H
 #define ENCRYPT_H
 
-#include <stdlib.h>
-#include <sys/types.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <sys/types.h>
 
 typedef struct {
-    RSA *public_key;
-    RSA *private_key;
+	RSA *public_key;
+	RSA *private_key;
 } KeyPair;
 
 typedef struct {
-    unsigned char key[32];
-    unsigned char init_vect[16];
+	unsigned char key[32];
+	unsigned char init_vect[16];
 } SymmetricKey;
 
 bool key_pair_init(KeyPair *key_pair, const char *public_key_path, const char *private_key_path);
 
 bool key_pair_free(KeyPair *key_pair);
+
+size_t rsa_to_bytes(RSA *public_key, unsigned char *bytes);
+
+void rsa_from_bytes(RSA **key, const unsigned char *bytes, size_t len);
 
 bool symmetric_key_init(SymmetricKey *key);
 
