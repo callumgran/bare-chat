@@ -475,7 +475,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	chat_msg_send(&connect, data->socket, &ext_addr);
 }
 
-// TODO: Find correct buffer size and fix naming
+// TODO: Find correct buffer size and fix the naming
 static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	if (addr_book_contains(data->addr_book, &data->ext_addr)) {
