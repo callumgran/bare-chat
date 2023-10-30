@@ -19,6 +19,7 @@
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
 #include <client/client.h>
+#include <encrypt/encrypt.h>
 #include <fcntl.h>
 #include <lib/env_parser.h>
 #include <lib/logger.h>
@@ -58,9 +59,8 @@ static void send_ping_to_addr(void *arg, void *data)
 {
 	AddrEntry *addr = arg;
 	PingData *pd = data;
-	char buf[1024];
+	char buf[20];
 	addr_to_string(buf, &addr->addr);
-	// LOG_INFO("Pinging to %s", buf);
 	chat_msg_send(pd->msg, pd->socket, &addr->addr);
 }
 
@@ -68,24 +68,20 @@ static void ping_loop(void *arg)
 {
 	ChatClient *data = (ChatClient *)arg;
 	ChatMessage ping;
-	ping.header.server_key = SERVER_KEY;
-	ping.header.type = CHAT_MESSAGE_TYPE_PING;
-	ping.header.len = 0;
-	ping.body = NULL;
-	uint32_t i = 61;
+	chat_msg_init(&ping, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+
+	uint32_t i = 0;
 
 	while (data->running) {
-		if (!data->connected) {
-			sleep_seconds(1);
-			continue;
-		}
-
 		if (i++ < CLIENT_PING_INTERVAL && data->running) {
 			sleep_seconds(1);
 			continue;
 		}
+
 		i = 0;
-		chat_msg_send(&ping, data->socket, &data->server_addr);
+		if (data->connected) {
+			chat_msg_send(&ping, data->socket, &data->server_addr);
+		}
 		if (!addr_book_empty(data->addr_book)) {
 			PingData pd = { 0 };
 			pd.socket = data->socket;
@@ -93,8 +89,6 @@ static void ping_loop(void *arg)
 			addr_book_foreach(data->addr_book, send_ping_to_addr, &pd);
 		}
 	}
-
-	LOG_INFO("Quitting ping loop...");
 }
 
 static bool string_eq(const char *fst, const char *snd)
@@ -107,10 +101,7 @@ static bool string_eq(const char *fst, const char *snd)
 static void handle_leave_command(ChatClient *data)
 {
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_LEAVE;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_LEAVE, 0, SERVER_KEY, NULL);
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 	data->connected = false;
 	LOG_INFO("Disconnected from server");
@@ -119,10 +110,7 @@ static void handle_leave_command(ChatClient *data)
 static void handle_info_command(ChatClient *data)
 {
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_INFO;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_INFO, 0, SERVER_KEY, NULL);
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 }
 
@@ -134,6 +122,7 @@ static void check_client_connected(void *arg)
 	}
 }
 
+// TODO: Find correct buffer size
 static void handle_join_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -149,19 +138,26 @@ static void handle_join_command(ChatClient *data)
 		return;
 	}
 
+	char public_key[512] = { 0 };
+
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_JOIN;
-	msg.header.len = strlen(data->name);
-	msg.body = data->name;
+	if (data->key_pair.public_key == NULL) {
+		LOG_ERR("Public key not initialized");
+		return;
+	}
+
+	size_t len = rsa_to_bytes(data->key_pair.public_key, (unsigned char *)public_key);
+
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_JOIN, len, SERVER_KEY, public_key);
+
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
-	data->connected = false;
 	submit_worker_task_timeout(data->threadpool, check_client_connected, &data->connected,
 							   CLIENT_JOIN_TIMEOUT);
 }
 
+// TODO fix all this naming lmao and buffer size
 static void handle_connect_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -178,20 +174,26 @@ static void handle_connect_command(ChatClient *data)
 		return;
 	}
 
-	char body[INET_ADDRSTRLEN + 5];
+	char body[INET_ADDRSTRLEN + 6 + 512];
 	addr_to_string(body, &ext_addr);
+	size_t addr_size = strlen(body);
+	strcat(body, "|");
+	size_t len = rsa_to_bytes(data->key_pair.public_key, (unsigned char *)(body + strlen(body)));
+
+	char buffer[4096] = { 0 };
+	int size = s_encrypt_data(&data->server_key, (unsigned char *)body, addr_size + len, (unsigned char *)buffer);
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_CONNECT;
-	msg.body = body;
-	msg.header.len = INET_ADDRSTRLEN + 5;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, size, SERVER_KEY, buffer);
 
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
+
 	// Send connect message to other user at the same time to utilize UDP hole punching
-	chat_msg_send_text(NULL, data->socket, &ext_addr);
+	ChatMessage ext_msg = { 0 };
+	chat_msg_init(&ext_msg, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+	chat_msg_send(&ext_msg, data->socket, &ext_addr);
 }
 
 static void handle_disconnect_command(ChatClient *data)
@@ -218,12 +220,8 @@ static void handle_disconnect_command(ChatClient *data)
 	addr_book_remove(data->addr_book, &ext_addr);
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
 	LOG_INFO("Sending disconnect message to other user...\n");
-	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &ext_addr);
 	LOG_INFO("The other user should now be unable to send you messages");
 }
@@ -251,6 +249,7 @@ static void handle_setname_command(ChatClient *data)
 	}
 
 	memcpy(data->name, name, 256);
+	LOG_INFO("Set name to %s", data->name);
 }
 
 static void handle_msg_command(ChatClient *data)
@@ -283,8 +282,12 @@ static void handle_msg_command(ChatClient *data)
 		entry = addr_book_find(data->addr_book, &ext_addr);
 	}
 
-	chat_msg_send_text(msg, data->socket, &ext_addr);
-	// LOG_INFO("Message sent to %s", entry->name);
+	if (entry == NULL) {
+		LOG_ERR("Unknown client, cannot send message.");
+		return;
+	}
+
+	chat_msg_send_text_enc(msg, data->socket, &ext_addr, &entry->key);
 }
 
 static void handle_ping_command(ChatClient *data)
@@ -304,27 +307,33 @@ static void handle_ping_command(ChatClient *data)
 	}
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_PING;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+
 	LOG_INFO("Sending ping message to other address %s...\n", addr);
 	chat_msg_send(&msg, data->socket, &ext_addr);
 }
 
-static void disconnect_all_connections(void *data, void *arg)
+// Function name is hella retarded
+static void disconnect_connection(void *data, void *arg)
 {
 	AddrEntry *entry = data;
 	ChatClient *client = arg;
 
 	ChatMessage msg = { 0 };
-	msg.header.server_key = SERVER_KEY;
-	msg.header.type = CHAT_MESSAGE_TYPE_DISCONNECT;
-	msg.header.len = 0;
-	msg.body = NULL;
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
 
 	chat_msg_send(&msg, client->socket, &entry->addr);
 	addr_book_remove(client->addr_book, &entry->addr);
+}
+
+static void handle_quit_command(ChatClient *data)
+{
+	if (!addr_book_empty(data->addr_book))
+		addr_book_foreach(data->addr_book, disconnect_connection, data);
+	if (data->connected)
+		handle_leave_command(data);
+
+	data->running = false;
 }
 
 static void user_command_loop(void *arg)
@@ -332,7 +341,7 @@ static void user_command_loop(void *arg)
 	ChatClient *data = (ChatClient *)arg;
 	printf("Welcome to chatp2p client!\n");
 	print_help();
-	char buf[1024] = { 0 };
+	char buf[65536] = { 0 };
 	while (data->running) {
 		if (fgets(buf, sizeof(buf), stdin) != NULL) {
 			char *command = strtok(buf, " ");
@@ -344,12 +353,7 @@ static void user_command_loop(void *arg)
 			if (string_eq(command, HELP_COMMAND)) {
 				print_help();
 			} else if (string_eq(command, QUIT_COMMAND)) {
-				if (!addr_book_empty(data->addr_book))
-					addr_book_foreach(data->addr_book, disconnect_all_connections, data);
-				if (data->connected)
-					handle_leave_command(data);
-
-				data->running = false;
+				handle_quit_command(data);
 			} else if (string_eq(command, INFO_COMMAND)) {
 				handle_info_command(data);
 			} else if (string_eq(command, JOIN_COMMAND)) {
@@ -364,7 +368,6 @@ static void user_command_loop(void *arg)
 				handle_list_command(data);
 			} else if (string_eq(command, SETNAME_COMMAND)) {
 				handle_setname_command(data);
-				LOG_INFO("Set name to %s", data->name);
 			} else if (string_eq(command, MSG_COMMAND)) {
 				handle_msg_command(data);
 			} else if (string_eq(command, PING_COMMAND)) {
@@ -377,20 +380,29 @@ static void user_command_loop(void *arg)
 	}
 }
 
+// TODO: Find correct buffer size and fix naming
 static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
 
 	char *name = NULL;
 
-	if (entry == NULL && !addr_eq(&data->ext_addr, &data->server_addr)) {
+	bool is_server = addr_eq(&data->ext_addr, &data->server_addr);
+
+	SymmetricKey key = { 0 };
+
+	if (entry == NULL && !is_server) {
 		LOG_ERR("Unknown client tried to send you a message!");
 		LOG_INFO("Check your OPSEC, you might be getting attacked!");
 		return;
-	} else if (addr_eq(&data->ext_addr, &data->server_addr)) {
+	} else if (is_server) {
 		name = "Server";
+		memcpy(key.key, data->server_key->key, 32);
+		memcpy(key.init_vect, data->server_key->init_vect, 16);
 	} else {
 		name = entry->name;
+		memcpy(key.key, entry->key.key, 32);
+		memcpy(key.init_vect, entry->key.init_vect, 16);
 	}
 
 	char addr_str[INET_ADDRSTRLEN];
@@ -399,17 +411,32 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 		return;
 	}
 
+	char text[65536] = { 0 };
+	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)text);
+
+#ifdef __linux__
+	if (!is_server) {
+		char notification[1024] = { 0 };
+		snprintf(notification, sizeof(notification), "notify-send \"New message!\" \"You have a new message from %s : %s!\"", name, addr_str);
+		system(notification);
+	}
+#endif
+
 	LOG_MSG("-------------------------------------------------------");
 	LOG_MSG("Received message from %s : %s", name, addr_str);
-	LOG_MSG("Message: %s", msg->body);
+	LOG_MSG("Message: %s", text);
 	LOG_MSG("-------------------------------------------------------");
 }
 
+// TODO: Find correct buffer size and fix naming
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	char *name = strtok(msg->body, "|");
-	char *addr = msg->body + strlen(name) + 1;
+	char buf[4096] = { 0 };
+	int size = s_decrypt_data(data->server_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
 
+	char *name = strtok(buf, "|");
+	char *addr = strtok(NULL, "|");
+	char *public_key = buf + strlen(name) + strlen(addr) + 2;
 	struct sockaddr_in ext_addr = { 0 };
 	if (addr_from_string(&ext_addr, addr) < 0) {
 		LOG_ERR("Invalid address for connect response");
@@ -421,17 +448,34 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 		return;
 	}
 
-	addr_book_push_back(data->addr_book, &ext_addr, name);
+	if (!addr_book_push_back(data->addr_book, &ext_addr)) {
+		LOG_ERR("Failed to add client to address book");
+		return;
+	}
+
+	AddrEntry *entry = addr_book_find(data->addr_book, &ext_addr);
+	memcpy(entry->name, name, 256);
+
+	RSA *public_key_rsa = NULL;
+
+	char buffer[4096] = { 0 };
+	rsa_from_bytes(&public_key_rsa, (unsigned char *)public_key, size - strlen(name) - strlen(addr) - 2);
+
+	char keyname[256 + sizeof(SymmetricKey)] = { 0 };
+	memcpy(keyname, &entry->key, sizeof(SymmetricKey));
+	memcpy(keyname + sizeof(SymmetricKey), data->name, strlen(data->name));
+
+	int len = as_encrypt_data(public_key_rsa, (unsigned char *)keyname, sizeof(SymmetricKey) + strlen(data->name),
+							  (unsigned char *)buffer);
 
 	ChatMessage connect = { 0 };
-	connect.header.server_key = SERVER_KEY;
-	connect.header.type = CHAT_MESSAGE_TYPE_CONNECT_RESPONSE;
-	connect.header.len = strlen(data->name);
-	connect.body = data->name;
+	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, len, SERVER_KEY,
+				  buffer);
 
 	chat_msg_send(&connect, data->socket, &ext_addr);
 }
 
+// TODO: Find correct buffer size and fix the naming
 static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	if (addr_book_contains(data->addr_book, &data->ext_addr)) {
@@ -445,13 +489,25 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 		return;
 	}
 
-	addr_book_push_back(data->addr_book, &data->ext_addr, msg->body);
+	if (!addr_book_push_back(data->addr_book, &data->ext_addr)) {
+		LOG_ERR("Failed to add client to address book");
+		return;
+	}
 
-	chat_msg_send_text("Howdy new partner!", data->socket, &data->ext_addr);
+	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
+
+	char buf[4096] = { 0 };
+	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, buf);
+
+	memcpy(entry->key.key, buf, sizeof(entry->key.key));
+	memcpy(entry->key.init_vect, buf + sizeof(entry->key.key), sizeof(entry->key.init_vect));
+	memcpy(entry->name, buf + sizeof(SymmetricKey), size - sizeof(SymmetricKey));
+
+	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key);
 
 	LOG_INFO(
 		"Client %s with nickname %s received your connection request, you can now communicate by name :)",
-		addr_str, msg->body);
+		addr_str, entry->name);
 }
 
 static void chat_msg_disconnect_handler(ClientThreadData *data)
@@ -472,8 +528,22 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 	addr_book_remove(data->addr_book, &data->ext_addr);
 }
 
-static void chat_msg_join_response_handler(ClientThreadData *data)
+// TODO: Find correct buffer size and fix naming
+static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
+	char buf[4096] = { 0 };
+
+	as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
+
+	memcpy(data->server_key, buf, sizeof(SymmetricKey));
+
+	char response[272] = { 0 };
+	int size = s_encrypt_data(data->server_key, (unsigned char *)data->name, strlen(data->name), (unsigned char *)response);
+
+	ChatMessage ret = { 0 };
+	chat_msg_init(&ret, CHAT_MESSAGE_TYPE_NAME, size, SERVER_KEY, response);
+	chat_msg_send(&ret, data->socket, &data->server_addr);
+
 	*(data->connected) = true;
 	LOG_INFO("Successfully connected to server");
 }
@@ -491,28 +561,19 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 	if (entry == NULL) {
 		if (addr_eq(&data->ext_addr, &data->server_addr)) {
 			LOG_ERR("Server tried to ping you! This is retarded and something is wrong!");
-		} else {
-			LOG_ERR("Unknown client %s tried to ping you!", addr_str);
 		}
-		LOG_INFO("Check your OPSEC, you might be getting attacked!");
 		return;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &entry->last_seen);
 
-	// LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
-
 	ChatMessage pong = { 0 };
-	pong.header.server_key = SERVER_KEY;
-	pong.header.type = CHAT_MESSAGE_TYPE_PONG;
-	pong.header.len = 0;
-	pong.body = NULL;
+	chat_msg_init(&pong, CHAT_MESSAGE_TYPE_PONG, 0, SERVER_KEY, NULL);
 
 	chat_msg_send(&pong, data->socket, &data->ext_addr);
-
-	// LOG_INFO("Sent PONG message to %s : %s", entry->name, addr_str);
 }
 
+// TODO: Find out if this is even needed
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	(void)msg;
@@ -520,6 +581,7 @@ static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *d
 	LOG_ERR("Unknown message type");
 }
 
+// TODO: Find out if this is even needed
 static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	(void)msg;
@@ -553,7 +615,7 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 		chat_msg_disconnect_handler(data);
 		break;
 	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
-		chat_msg_join_response_handler(data);
+		chat_msg_join_response_handler(msg, data);
 		break;
 	case CHAT_MESSAGE_TYPE_ERROR:
 		chat_msg_error_handler(msg, data);
@@ -605,6 +667,7 @@ int client_init(ChatClient *client, char *env_file)
 	client->socket = socket(AF_INET, SOCK_DGRAM, 0);
 	if (client->socket < 0) {
 		LOG_ERR("Could not create socket");
+		env_vars_free(env_vars);
 		return -1;
 	}
 
@@ -621,6 +684,15 @@ int client_init(ChatClient *client, char *env_file)
 	client->addr_book = malloc(sizeof(AddrBook));
 	addr_book_init(client->addr_book);
 
+	char *private_key_path = env_get_val(env_vars, "PRIVATE_KEY_PATH");
+	char *public_key_path = env_get_val(env_vars, "PUBLIC_KEY_PATH");
+
+	if (!key_pair_init(&client->key_pair, public_key_path, private_key_path)) {
+		LOG_ERR("Failed to initialize key pair");
+		env_vars_free(env_vars);
+		return -1;
+	}
+
 	env_vars_free(env_vars);
 
 	return 0;
@@ -630,9 +702,10 @@ void client_free(ChatClient *client)
 {
 	threadpool_free(client->threadpool);
 	addr_book_free(client->addr_book);
+	key_pair_free(&client->key_pair);
 	free(client->threadpool);
 	free(client->addr_book);
-	LOG_INFO("client freed and closed.");
+	LOG_INFO("Client freed and closed.");
 }
 
 int client_run(ChatClient *client)
@@ -675,6 +748,8 @@ int client_run(ChatClient *client)
 			data->socket = client->socket;
 			data->server_addr = client->server_addr;
 			data->name = client->name;
+			data->server_key = &client->server_key;
+			data->key_pair = &client->key_pair;
 			submit_worker_task(client->threadpool, handle_receive_msg, (void *)data);
 		} else {
 			LOG_ERR("recvfrom() failed for some reason");

@@ -19,6 +19,7 @@
 #define SERVER_H
 
 #include <chatp2p/address_book.h>
+#include <encrypt/encrypt.h>
 #include <lib/logger.h>
 #include <lib/threadpool.h>
 
@@ -29,6 +30,7 @@ typedef struct {
 	bool running;
 	AddrBook *addr_book;
 	Threadpool *threadpool;
+	KeyPair key_pair;
 } ChatServer;
 
 typedef struct {
@@ -38,6 +40,7 @@ typedef struct {
 	AddrBook *addr_book;
 	char buffer[SERVER_BUF_LEN];
 	struct sockaddr_in client_addr;
+	KeyPair *key_pair;
 } ServerThreadData;
 
 int server_init(ChatServer *server, char *env_file);

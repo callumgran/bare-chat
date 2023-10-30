@@ -10,7 +10,7 @@ OBJS := $(SRCS:%.c=$(OBJDIR)/%.o)
 CFLAGS = -Iinclude -Wall -Wextra -Wshadow -std=c11 -g -D_POSIX_C_SOURCE=200809L
 CFLAGS += -DLOGGING
 LDFLAGS = -pthread
-LDLIBS = -lm
+LDLIBS = -lm -lssl -lcrypto
 
 .PHONY: format clean tags bear $(OBJDIR)
 TARGET = server
@@ -33,7 +33,7 @@ debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
 client:
-	$(CC) $(CFLAGS) -o $(CLIENT) src/client/chat_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/client/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c
+	$(CC) $(CFLAGS) -o $(CLIENT) src/client/chat_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/client/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c src/encrypt/encrypt.c $(LDLIBS)
 
 clean:
 	rm -rf $(OBJDIR) $(TARGET) $(CLIENT)

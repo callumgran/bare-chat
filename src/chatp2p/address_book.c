@@ -134,13 +134,10 @@ bool addr_update_time(AddrBook *addr_book, const struct sockaddr_in *addr)
 	return false;
 }
 
-bool addr_book_push_back(AddrBook *addr_book, struct sockaddr_in *addr, const char *name)
+bool addr_book_push_back(AddrBook *addr_book, struct sockaddr_in *addr)
 {
 	if (addr_book == NULL || addr == NULL)
 		return false;
-
-	if (strlen(name) > 255)
-		LOG_ERR("Name too long, will be truncated.");
 
 	AddrEntry *node = malloc(sizeof(AddrEntry));
 
@@ -148,7 +145,8 @@ bool addr_book_push_back(AddrBook *addr_book, struct sockaddr_in *addr, const ch
 		return false;
 
 	memcpy(&node->addr, addr, sizeof(struct sockaddr_in));
-	strncpy(node->name, name, sizeof(node->name));
+	strncpy(node->name, "loading", 255);
+	symmetric_key_init(&node->key);
 	clock_gettime(CLOCK_MONOTONIC_RAW, &node->last_seen);
 	node->prev = addr_book->tail;
 	node->next = NULL;

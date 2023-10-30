@@ -13,6 +13,7 @@
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
 #include <chatp2p/server.h>
+#include <encrypt/encrypt.h>
 #include <lib/env_parser.h>
 #include <lib/logger.h>
 #include <lib/threadpool.h>
@@ -48,7 +49,17 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 		return;
 	}
 
-	addr_book_push_back(addrs, client_addr, msg->body);
+	if (!addr_book_push_back(addrs, client_addr)) {
+		LOG_ERR("Could not add client to address book");
+		return;
+	}
+
+	AddrEntry *entry = addr_book_find(addrs, client_addr);
+
+	if (entry == NULL) {
+		LOG_ERR("Could not find client in address book");
+		return;
+	}
 
 	char addr_str[INET_ADDRSTRLEN];
 	if (addr_to_string(addr_str, client_addr) < 0) {
@@ -56,15 +67,69 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 		return;
 	}
 
+	RSA *key = NULL;
+	rsa_from_bytes(&key, (unsigned char *)msg->body, msg->header.len);
+
+	if (key == NULL) {
+		LOG_ERR("Could not convert client public key to RSA");
+		return;
+	}
+
+	unsigned char buffer[48] = { 0 };
+	memcpy(buffer, entry->key.key, sizeof(entry->key.key));
+	memcpy(buffer + sizeof(entry->key.key), entry->key.init_vect, sizeof(entry->key.init_vect));
+
+	char ret_buf[4096] = { 0 };
+	int size =
+		as_encrypt_data(key, (unsigned char *)buffer, sizeof(buffer), (unsigned char *)ret_buf);
+
+	if (size < 0) {
+		LOG_ERR("Could not encrypt data");
+		return;
+	}
+
 	ChatMessage response = { 0 };
-	response.header.server_key = SERVER_KEY;
-	response.header.type = CHAT_MESSAGE_TYPE_JOIN_RESPONSE;
-	response.header.len = 0;
-	response.body = NULL;
+	chat_msg_init(&response, CHAT_MESSAGE_TYPE_JOIN_RESPONSE, size, SERVER_KEY, ret_buf);
 
 	chat_msg_send(&response, socket, client_addr);
 
-	LOG_INFO("Client %s with nickname %s joined the server", addr_str, msg->body);
+	LOG_INFO("Sending symmetric key to client %s", addr_str);
+}
+
+static void chat_msg_name_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
+								  AddrBook *addrs)
+{
+	if (!addr_book_contains(addrs, client_addr)) {
+		LOG_INFO("Client not in address book");
+		return;
+	}
+
+	AddrEntry *entry = addr_book_find(addrs, client_addr);
+
+	if (entry == NULL) {
+		LOG_ERR("Could not find client in address book");
+		return;
+	}
+
+	char name[256] = { 0 };
+	int size = s_decrypt_data(&entry->key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)name);
+	
+	if (size < 0) {
+		LOG_ERR("Could not decrypt data");
+		return;
+	}
+	
+	LOG_INFO("Client %s set their name to %s", entry->name, name);
+
+	memcpy(entry->name, name, strlen(name));
+
+	char addr_str[INET_ADDRSTRLEN];
+	if (addr_to_string(addr_str, client_addr) < 0) {
+		LOG_ERR("Could not convert address to string");
+		return;
+	}
+
+	LOG_INFO("Client %s set their name to %s", addr_str, entry->name);
 }
 
 static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
@@ -82,12 +147,11 @@ static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *ad
 		return;
 	}
 
-	chat_msg_send_text("Goodbye!", socket, client_addr);
-
 	LOG_INFO("Client %s with nickname %s left the server", addr_str, entry->name);
 	addr_book_remove(addrs, client_addr);
 }
 
+// Clean up this function
 static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 									 AddrBook *addrs, int socket)
 {
@@ -95,13 +159,23 @@ static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in 
 		LOG_ERR("Client not in address book tried to connect to a client");
 	}
 
-	if (msg->body == NULL) {
-		LOG_ERR("Could not parse CONNECT message");
+	AddrEntry *entry = addr_book_find(addrs, client_addr);
+
+	char *sender_name = entry->name;
+
+	char buf[512] = { 0 };
+	int size = s_decrypt_data(&entry->key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
+
+	if (size < 0) {
+		LOG_ERR("Could not decrypt data");
 		return;
 	}
 
+	char *client_addr_str = strtok(buf, "|");
+	char *sender_pub_key = buf + strlen(client_addr_str) + 1;
+
 	struct sockaddr_in addr_in = { 0 };
-	if (addr_from_string(&addr_in, msg->body) < 0) {
+	if (addr_from_string(&addr_in, client_addr_str) < 0) {
 		LOG_ERR("Could not convert address to sockaddr_in");
 		return;
 	}
@@ -111,24 +185,26 @@ static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in 
 		return;
 	}
 
-	char *sender_name = addr_book_find(addrs, client_addr)->name;
+	AddrEntry *client_entry = addr_book_find(addrs, &addr_in);
 
-	char body[512] = { 0 };
+	char body[1024] = { 0 };
 	ChatMessage response = { 0 };
-	response.header.server_key = SERVER_KEY;
-	response.header.type = CHAT_MESSAGE_TYPE_CONNECT;
 
 	memcpy(body, sender_name, strlen(sender_name));
 	body[strlen(sender_name)] = '|';
 	addr_to_string(body + strlen(sender_name) + 1, client_addr);
-	body[strlen(body)] = '\0';
-	response.body = body;
+	size_t body_len = strlen(sender_name) + 1 + strlen(client_addr_str);
+	body[body_len] = '|';
+	memcpy(body + body_len + 1, sender_pub_key, size - strlen(client_addr_str) - 1);
 
-	response.header.len = strlen(response.body);
+	int enc_size = s_encrypt_data(&client_entry->key, (unsigned char *)body, size + 2 + strlen(sender_name), (unsigned char *)body);
+
+	chat_msg_init(&response, CHAT_MESSAGE_TYPE_CONNECT, enc_size, SERVER_KEY, body);
 
 	chat_msg_send(&response, socket, &addr_in);
 }
 
+// At some point I have to make sure that errors are sent to the client if something goes wrong
 static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 								   AddrBook *addrs, int socket)
 {
@@ -146,6 +222,8 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *add
 		return;
 	}
 
+	AddrEntry *entry = addr_book_find(addrs, client_addr);
+
 	char buf[4096] = { 0 };
 
 	if (addrs->size == 1) {
@@ -159,8 +237,19 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *add
 		}
 	}
 
+	char ret_buf[4096] = { 0 };
+	int size = s_encrypt_data(&entry->key, (unsigned char *)buf, strlen(buf), (unsigned char *)ret_buf);
+
+	if (size < 0) {
+		LOG_ERR("Could not encrypt data");
+		return;
+	}
+
+	ChatMessage response = { 0 };
+	chat_msg_init(&response, CHAT_MESSAGE_TYPE_TEXT, size, SERVER_KEY, ret_buf);
+	chat_msg_send(&response, socket, client_addr);
+
 	LOG_INFO("Sending address book to client");
-	chat_msg_send_text(buf, socket, client_addr);
 }
 
 static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
@@ -184,11 +273,7 @@ static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *add
 	LOG_INFO("Received PING message from %s : %s", entry->name, addr_str);
 
 	ChatMessage pong = { 0 };
-	pong.header.server_key = SERVER_KEY;
-	pong.header.type = CHAT_MESSAGE_TYPE_PONG;
-	pong.header.len = 0;
-	pong.body = NULL;
-
+	chat_msg_init(&pong, CHAT_MESSAGE_TYPE_PONG, 0, SERVER_KEY, NULL);
 	chat_msg_send(&pong, socket, client_addr);
 
 	LOG_INFO("Sent PONG message to client %s", addr_str);
@@ -226,6 +311,9 @@ static void chat_msg_handler(const ChatMessage *msg, struct sockaddr_in *client_
 	case CHAT_MESSAGE_TYPE_JOIN_RESPONSE:
 		LOG_ERR(
 			"Received JOIN_RESPONSE message from client, server doesn't send JOIN messages to clients");
+		break;
+	case CHAT_MESSAGE_TYPE_NAME:
+		chat_msg_name_handler(msg, client_addr, addrs);
 		break;
 	case CHAT_MESSAGE_TYPE_LEAVE:
 		chat_msg_leave_handler(client_addr, addrs, socket);
@@ -285,6 +373,7 @@ int server_init(ChatServer *server, char *env_file)
 	server->socket = socket(AF_INET, SOCK_DGRAM, 0);
 	if (server->socket < 0) {
 		LOG_ERR("Could not create socket");
+		env_vars_free(env_vars);
 		return -1;
 	}
 
@@ -292,6 +381,7 @@ int server_init(ChatServer *server, char *env_file)
 
 	if (setsockopt(server->socket, SOL_SOCKET, optname, &(int){ 1 }, sizeof(int)) < 0) {
 		LOG_ERR("Could not set socket options");
+		env_vars_free(env_vars);
 		return -1;
 	}
 
@@ -304,6 +394,7 @@ int server_init(ChatServer *server, char *env_file)
 
 	if (bind(server->socket, (struct sockaddr *)&address, sizeof(address)) < 0) {
 		LOG_ERR("Could not bind socket");
+		env_vars_free(env_vars);
 		return -1;
 	}
 
@@ -316,6 +407,15 @@ int server_init(ChatServer *server, char *env_file)
 	server->addr_book = malloc(sizeof(AddrBook));
 	addr_book_init(server->addr_book);
 
+	char *private_key_path = env_get_val(env_vars, "PRIVATE_KEY_PATH");
+	char *public_key_path = env_get_val(env_vars, "PUBLIC_KEY_PATH");
+
+	if (!key_pair_init(&server->key_pair, public_key_path, private_key_path)) {
+		LOG_ERR("Could not initialize key pair");
+		env_vars_free(env_vars);
+		return -1;
+	}
+
 	env_vars_free(env_vars);
 
 	return 0;
@@ -325,6 +425,8 @@ void server_free(ChatServer *server)
 {
 	threadpool_free(server->threadpool);
 	addr_book_free(server->addr_book);
+	key_pair_free(&server->key_pair);
+	free(server->addr_book);
 	free(server->threadpool);
 	LOG_INFO("Server freed and closed.");
 }
@@ -378,6 +480,7 @@ int server_run(ChatServer *server)
 			memcpy(&data->client_addr, &client_address, sizeof(struct sockaddr_in));
 			data->addr_book = server->addr_book;
 			data->socket = server->socket;
+			data->key_pair = &server->key_pair;
 			submit_worker_task(server->threadpool, handle_msg, (void *)data);
 		}
 	}
