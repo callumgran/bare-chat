@@ -73,18 +73,15 @@ static void ping_loop(void *arg)
 	uint32_t i = 0;
 
 	while (data->running) {
-		if (!data->connected) {
-			sleep_seconds(1);
-			continue;
-		}
-
 		if (i++ < CLIENT_PING_INTERVAL && data->running) {
 			sleep_seconds(1);
 			continue;
 		}
 
 		i = 0;
-		chat_msg_send(&ping, data->socket, &data->server_addr);
+		if (data->connected) {
+			chat_msg_send(&ping, data->socket, &data->server_addr);
+		}
 		if (!addr_book_empty(data->addr_book)) {
 			PingData pd = { 0 };
 			pd.socket = data->socket;
@@ -125,6 +122,7 @@ static void check_client_connected(void *arg)
 	}
 }
 
+// TODO: Find correct buffer size
 static void handle_join_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -159,7 +157,7 @@ static void handle_join_command(ChatClient *data)
 							   CLIENT_JOIN_TIMEOUT);
 }
 
-// TODO fix all this naming lmao
+// TODO fix all this naming lmao and buffer size
 static void handle_connect_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -191,9 +189,11 @@ static void handle_connect_command(ChatClient *data)
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &data->server_addr);
+
 	// Send connect message to other user at the same time to utilize UDP hole punching
-	// TODO: This is a hacky solution, find a better way to do this
-	chat_msg_send_text(NULL, data->socket, &ext_addr);
+	ChatMessage ext_msg = { 0 };
+	chat_msg_init(&ext_msg, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+	chat_msg_send(&ext_msg, data->socket, &ext_addr);
 }
 
 static void handle_disconnect_command(ChatClient *data)
@@ -222,7 +222,6 @@ static void handle_disconnect_command(ChatClient *data)
 	ChatMessage msg = { 0 };
 	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
 	LOG_INFO("Sending disconnect message to other user...\n");
-	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
 	chat_msg_send(&msg, data->socket, &ext_addr);
 	LOG_INFO("The other user should now be unable to send you messages");
 }
@@ -250,6 +249,7 @@ static void handle_setname_command(ChatClient *data)
 	}
 
 	memcpy(data->name, name, 256);
+	LOG_INFO("Set name to %s", data->name);
 }
 
 static void handle_msg_command(ChatClient *data)
@@ -313,7 +313,8 @@ static void handle_ping_command(ChatClient *data)
 	chat_msg_send(&msg, data->socket, &ext_addr);
 }
 
-static void disconnect_all_connections(void *data, void *arg)
+// Function name is hella retarded
+static void disconnect_connection(void *data, void *arg)
 {
 	AddrEntry *entry = data;
 	ChatClient *client = arg;
@@ -325,12 +326,22 @@ static void disconnect_all_connections(void *data, void *arg)
 	addr_book_remove(client->addr_book, &entry->addr);
 }
 
+static void handle_quit_command(ChatClient *data)
+{
+	if (!addr_book_empty(data->addr_book))
+		addr_book_foreach(data->addr_book, disconnect_connection, data);
+	if (data->connected)
+		handle_leave_command(data);
+
+	data->running = false;
+}
+
 static void user_command_loop(void *arg)
 {
 	ChatClient *data = (ChatClient *)arg;
 	printf("Welcome to chatp2p client!\n");
 	print_help();
-	char buf[1024] = { 0 };
+	char buf[65536] = { 0 };
 	while (data->running) {
 		if (fgets(buf, sizeof(buf), stdin) != NULL) {
 			char *command = strtok(buf, " ");
@@ -342,12 +353,7 @@ static void user_command_loop(void *arg)
 			if (string_eq(command, HELP_COMMAND)) {
 				print_help();
 			} else if (string_eq(command, QUIT_COMMAND)) {
-				if (!addr_book_empty(data->addr_book))
-					addr_book_foreach(data->addr_book, disconnect_all_connections, data);
-				if (data->connected)
-					handle_leave_command(data);
-
-				data->running = false;
+				handle_quit_command(data);
 			} else if (string_eq(command, INFO_COMMAND)) {
 				handle_info_command(data);
 			} else if (string_eq(command, JOIN_COMMAND)) {
@@ -362,7 +368,6 @@ static void user_command_loop(void *arg)
 				handle_list_command(data);
 			} else if (string_eq(command, SETNAME_COMMAND)) {
 				handle_setname_command(data);
-				LOG_INFO("Set name to %s", data->name);
 			} else if (string_eq(command, MSG_COMMAND)) {
 				handle_msg_command(data);
 			} else if (string_eq(command, PING_COMMAND)) {
@@ -375,19 +380,22 @@ static void user_command_loop(void *arg)
 	}
 }
 
+// TODO: Find correct buffer size and fix naming
 static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
 
 	char *name = NULL;
 
+	bool is_server = addr_eq(&data->ext_addr, &data->server_addr);
+
 	SymmetricKey key = { 0 };
 
-	if (entry == NULL && !addr_eq(&data->ext_addr, &data->server_addr)) {
+	if (entry == NULL && !is_server) {
 		LOG_ERR("Unknown client tried to send you a message!");
 		LOG_INFO("Check your OPSEC, you might be getting attacked!");
 		return;
-	} else if (addr_eq(&data->ext_addr, &data->server_addr)) {
+	} else if (is_server) {
 		name = "Server";
 		memcpy(key.key, data->server_key->key, 32);
 		memcpy(key.init_vect, data->server_key->init_vect, 16);
@@ -406,16 +414,21 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 	char text[65536] = { 0 };
 	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)text);
 
-	char notification[1024] = { 0 };
-	snprintf(notification, sizeof(notification), "notify-send \"New message!\" \"You have a new message from %s : %s!\"", name, addr_str);
-	system(notification);
+#ifdef __linux__
+	if (!is_server) {
+		char notification[1024] = { 0 };
+		snprintf(notification, sizeof(notification), "notify-send \"New message!\" \"You have a new message from %s : %s!\"", name, addr_str);
+		system(notification);
+	}
+#endif
+
 	LOG_MSG("-------------------------------------------------------");
 	LOG_MSG("Received message from %s : %s", name, addr_str);
 	LOG_MSG("Message: %s", text);
 	LOG_MSG("-------------------------------------------------------");
 }
 
-// TODO fix all this naming lmao
+// TODO: Find correct buffer size and fix naming
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	char buf[4096] = { 0 };
@@ -462,6 +475,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	chat_msg_send(&connect, data->socket, &ext_addr);
 }
 
+// TODO: Find correct buffer size and fix naming
 static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	if (addr_book_contains(data->addr_book, &data->ext_addr)) {
@@ -475,7 +489,6 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 		return;
 	}
 
-	addr_book_push_back(data->addr_book, &data->ext_addr);
 	if (!addr_book_push_back(data->addr_book, &data->ext_addr)) {
 		LOG_ERR("Failed to add client to address book");
 		return;
@@ -489,8 +502,6 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 	memcpy(entry->key.key, buf, sizeof(entry->key.key));
 	memcpy(entry->key.init_vect, buf + sizeof(entry->key.key), sizeof(entry->key.init_vect));
 	memcpy(entry->name, buf + sizeof(SymmetricKey), size - sizeof(SymmetricKey));
-
-	LOG_INFO("Client %s with nickname %s accepted your connection request size %d", addr_str, entry->name, size);
 
 	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key);
 
@@ -517,6 +528,7 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 	addr_book_remove(data->addr_book, &data->ext_addr);
 }
 
+// TODO: Find correct buffer size and fix naming
 static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	char buf[4096] = { 0 };
@@ -549,10 +561,7 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 	if (entry == NULL) {
 		if (addr_eq(&data->ext_addr, &data->server_addr)) {
 			LOG_ERR("Server tried to ping you! This is retarded and something is wrong!");
-		} else {
-			LOG_ERR("Unknown client %s tried to ping you!", addr_str);
 		}
-		LOG_INFO("Check your OPSEC, you might be getting attacked!");
 		return;
 	}
 
@@ -564,6 +573,7 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 	chat_msg_send(&pong, data->socket, &data->ext_addr);
 }
 
+// TODO: Find out if this is even needed
 static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	(void)msg;
@@ -571,6 +581,7 @@ static void chat_msg_unknown_handler(const ChatMessage *msg, ClientThreadData *d
 	LOG_ERR("Unknown message type");
 }
 
+// TODO: Find out if this is even needed
 static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	(void)msg;

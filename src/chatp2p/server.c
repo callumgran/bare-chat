@@ -132,7 +132,6 @@ static void chat_msg_name_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	LOG_INFO("Client %s set their name to %s", addr_str, entry->name);
 }
 
-// TODO: Encrypt ???
 static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
@@ -148,13 +147,11 @@ static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *ad
 		return;
 	}
 
-	chat_msg_send_text("Goodbye!", socket, client_addr);
-
 	LOG_INFO("Client %s with nickname %s left the server", addr_str, entry->name);
 	addr_book_remove(addrs, client_addr);
 }
 
-// TODO: Read encryption and forward to client
+// Clean up this function
 static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 									 AddrBook *addrs, int socket)
 {
@@ -207,6 +204,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in 
 	chat_msg_send(&response, socket, &addr_in);
 }
 
+// At some point I have to make sure that errors are sent to the client if something goes wrong
 static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *client_addr,
 								   AddrBook *addrs, int socket)
 {
@@ -217,7 +215,6 @@ static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *c
 	(void)msg;
 }
 
-// TODO: Encrypt this message and forward to client
 static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
@@ -277,7 +274,6 @@ static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *add
 
 	ChatMessage pong = { 0 };
 	chat_msg_init(&pong, CHAT_MESSAGE_TYPE_PONG, 0, SERVER_KEY, NULL);
-
 	chat_msg_send(&pong, socket, client_addr);
 
 	LOG_INFO("Sent PONG message to client %s", addr_str);
