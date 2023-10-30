@@ -185,6 +185,8 @@ bool addr_book_remove(AddrBook *addr_book, const struct sockaddr_in *addr)
 			if (addr_book->tail == node)
 				addr_book->tail = node->prev;
 
+			node->prev = NULL;
+			node->next = NULL;
 			free(node);
 
 			addr_book->size--;
