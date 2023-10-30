@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <encrypt/encrypt.h>
 
 #define SERVER_KEY 696969
 #define CHAT_MESSAGE_MAX_LEN UINT16_MAX - 1
@@ -87,5 +88,7 @@ void chat_msg_free(ChatMessage *msg);
 void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *client_addr);
 
 void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *client_addr);
+
+void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr, SymmetricKey *key);
 
 #endif // CHAT_MESSAGE_H

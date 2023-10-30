@@ -159,6 +159,7 @@ static void handle_join_command(ChatClient *data)
 							   CLIENT_JOIN_TIMEOUT);
 }
 
+// TODO fix all this naming lmao
 static void handle_connect_command(ChatClient *data)
 {
 	char *addr = strtok(NULL, "\n");
@@ -175,13 +176,17 @@ static void handle_connect_command(ChatClient *data)
 		return;
 	}
 
-	char body[INET_ADDRSTRLEN + 6 + 256];
+	char body[INET_ADDRSTRLEN + 6 + 512];
 	addr_to_string(body, &ext_addr);
+	size_t addr_size = strlen(body);
 	strcat(body, "|");
-	rsa_to_bytes(&data->key_pair.public_key, (unsigned char *)(body + strlen(body)));
+	size_t len = rsa_to_bytes(data->key_pair.public_key, (unsigned char *)(body + strlen(body)));
+
+	char buffer[4096] = { 0 };
+	int size = s_encrypt_data(&data->server_key, (unsigned char *)body, addr_size + len, (unsigned char *)buffer);
 
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, INET_ADDRSTRLEN + 5 + 256, SERVER_KEY, body);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, size, SERVER_KEY, buffer);
 
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
@@ -277,7 +282,12 @@ static void handle_msg_command(ChatClient *data)
 		entry = addr_book_find(data->addr_book, &ext_addr);
 	}
 
-	chat_msg_send_text(msg, data->socket, &ext_addr);
+	if (entry == NULL) {
+		LOG_ERR("Unknown client, cannot send message.");
+		return;
+	}
+
+	chat_msg_send_text_enc(msg, data->socket, &ext_addr, &entry->key);
 }
 
 static void handle_ping_command(ChatClient *data)
@@ -371,14 +381,20 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 
 	char *name = NULL;
 
+	SymmetricKey key = { 0 };
+
 	if (entry == NULL && !addr_eq(&data->ext_addr, &data->server_addr)) {
 		LOG_ERR("Unknown client tried to send you a message!");
 		LOG_INFO("Check your OPSEC, you might be getting attacked!");
 		return;
 	} else if (addr_eq(&data->ext_addr, &data->server_addr)) {
 		name = "Server";
+		memcpy(key.key, data->server_key->key, 32);
+		memcpy(key.init_vect, data->server_key->init_vect, 16);
 	} else {
 		name = entry->name;
+		memcpy(key.key, entry->key.key, 32);
+		memcpy(key.init_vect, entry->key.init_vect, 16);
 	}
 
 	char addr_str[INET_ADDRSTRLEN];
@@ -387,17 +403,27 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 		return;
 	}
 
+	char text[65536] = { 0 };
+	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)text);
+
+	char notification[1024] = { 0 };
+	snprintf(notification, sizeof(notification), "notify-send \"New message!\" \"You have a new message from %s : %s!\"", name, addr_str);
+	system(notification);
 	LOG_MSG("-------------------------------------------------------");
 	LOG_MSG("Received message from %s : %s", name, addr_str);
-	LOG_MSG("Message: %s", msg->body);
+	LOG_MSG("Message: %s", text);
 	LOG_MSG("-------------------------------------------------------");
 }
 
+// TODO fix all this naming lmao
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	char *name = strtok(msg->body, "|");
-	char *addr = msg->body + strlen(name) + 1;
+	char buf[4096] = { 0 };
+	int size = s_decrypt_data(data->server_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
 
+	char *name = strtok(buf, "|");
+	char *addr = strtok(NULL, "|");
+	char *public_key = buf + strlen(name) + strlen(addr) + 2;
 	struct sockaddr_in ext_addr = { 0 };
 	if (addr_from_string(&ext_addr, addr) < 0) {
 		LOG_ERR("Invalid address for connect response");
@@ -417,9 +443,21 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	AddrEntry *entry = addr_book_find(data->addr_book, &ext_addr);
 	memcpy(entry->name, name, 256);
 
+	RSA *public_key_rsa = NULL;
+
+	char buffer[4096] = { 0 };
+	rsa_from_bytes(&public_key_rsa, (unsigned char *)public_key, size - strlen(name) - strlen(addr) - 2);
+
+	char keyname[256 + sizeof(SymmetricKey)] = { 0 };
+	memcpy(keyname, &entry->key, sizeof(SymmetricKey));
+	memcpy(keyname + sizeof(SymmetricKey), data->name, strlen(data->name));
+
+	int len = as_encrypt_data(public_key_rsa, (unsigned char *)keyname, sizeof(SymmetricKey) + strlen(data->name),
+							  (unsigned char *)buffer);
+
 	ChatMessage connect = { 0 };
-	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, strlen(data->name), SERVER_KEY,
-				  data->name);
+	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, len, SERVER_KEY,
+				  buffer);
 
 	chat_msg_send(&connect, data->socket, &ext_addr);
 }
@@ -444,13 +482,21 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 	}
 
 	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
-	memcpy(entry->name, msg->body, 256);
 
-	chat_msg_send_text("Howdy new partner!", data->socket, &data->ext_addr);
+	char buf[4096] = { 0 };
+	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, buf);
+
+	memcpy(entry->key.key, buf, sizeof(entry->key.key));
+	memcpy(entry->key.init_vect, buf + sizeof(entry->key.key), sizeof(entry->key.init_vect));
+	memcpy(entry->name, buf + sizeof(SymmetricKey), size - sizeof(SymmetricKey));
+
+	LOG_INFO("Client %s with nickname %s accepted your connection request size %d", addr_str, entry->name, size);
+
+	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key);
 
 	LOG_INFO(
 		"Client %s with nickname %s received your connection request, you can now communicate by name :)",
-		addr_str, msg->body);
+		addr_str, entry->name);
 }
 
 static void chat_msg_disconnect_handler(ClientThreadData *data)
@@ -473,12 +519,11 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 
 static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	char buf[1024] = { 0 };
+	char buf[4096] = { 0 };
 
 	as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
 
-	memcpy(data->server_key->key, buf, 32);
-	memcpy(data->server_key->init_vect, buf + 32, 16);
+	memcpy(data->server_key, buf, sizeof(SymmetricKey));
 
 	char response[272] = { 0 };
 	int size = s_encrypt_data(data->server_key, (unsigned char *)data->name, strlen(data->name), (unsigned char *)response);

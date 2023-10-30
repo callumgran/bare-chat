@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 #include <chatp2p/chat_msg.h>
 #include <lib/logger.h>
+#include <encrypt/encrypt.h>
 #include <string.h>
 
 char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = { "CHAT_MESSAGE_TYPE_TEXT",
@@ -94,11 +95,15 @@ ssize_t chat_msg_from_string(ChatMessage *msg, const char *buffer, size_t len)
 
 ssize_t chat_msg_to_string(const ChatMessage *msg, char *buffer, size_t len)
 {
-	if (buffer == NULL || msg == NULL)
+	if (buffer == NULL || msg == NULL) {
+		LOG_ERR("Invalid arguments");
 		return -1;
+	}
 
-	if (len < sizeof(struct chat_msg_header_t) + msg->header.len)
+	if (len < sizeof(struct chat_msg_header_t) + msg->header.len) {
+		LOG_ERR("Buffer too small");
 		return -1;
+	}
 
 	uint16_t type = htons(msg->header.type);
 	uint16_t h_len = htons(msg->header.len);
@@ -143,6 +148,27 @@ void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *addr)
 		LOG_ERR("Failed to send message.");
 		return;
 	}
+}
+
+void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr, SymmetricKey *key)
+{
+	if (addr == NULL)
+		return;
+
+	char buffer[CHAT_MESSAGE_MAX_LEN];
+
+	ChatMessage msg = { 0 };
+	int len = 0;
+	msg.body = NULL;
+	if (text != NULL) {
+		msg.body = buffer;
+		len = s_encrypt_data(key, text, strlen(text), msg.body);
+	}
+	msg.header.type = CHAT_MESSAGE_TYPE_TEXT;
+	msg.header.server_key = SERVER_KEY;
+	msg.header.len = len;
+
+	chat_msg_send(&msg, socket, addr);
 }
 
 void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr)

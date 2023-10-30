@@ -148,12 +148,14 @@ int as_decrypt_data(RSA *private_key, const unsigned char *source, int len, unsi
 int s_encrypt_data(SymmetricKey *key, const unsigned char *source, int len, unsigned char *dest)
 {
 	if (key == NULL || source == NULL || dest == NULL) {
+		printf("Error: key == NULL || source == NULL || dest == NULL\n");
 		return -1;
 	}
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 
 	if (ctx == NULL) {
+		printf("Error: ctx == NULL\n");
 		return -1;
 	}
 
@@ -168,6 +170,7 @@ int s_encrypt_data(SymmetricKey *key, const unsigned char *source, int len, unsi
 
 	rc = EVP_EncryptUpdate(ctx, dest, &tmp_len, source, len);
 	if (rc != 1) {
+		printf("Error: EVP_EncryptUpdate\n");
 		return -1;
 	}
 
@@ -175,6 +178,7 @@ int s_encrypt_data(SymmetricKey *key, const unsigned char *source, int len, unsi
 
 	rc = EVP_EncryptFinal_ex(ctx, dest + enc_len, &tmp_len);
 	if (rc != 1) {
+		printf("Error: EVP_EncryptFinal_ex\n");
 		return -1;
 	}
 
