@@ -441,7 +441,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	if (*public_key == '|') {
 		public_key++;
 	}
-	
+
 	struct sockaddr_in ext_addr = { 0 };
 	if (addr_from_string(&ext_addr, addr) < 0) {
 		LOG_ERR("Invalid address for connect response");
@@ -465,7 +465,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	RSA *public_key_rsa = NULL;
 
 	char buffer[4096] = { 0 };
-	rsa_from_bytes(&public_key_rsa, (unsigned char *)public_key, size - strlen(name) - strlen(addr) - 1);
+	rsa_from_bytes(&public_key_rsa, (unsigned char *)public_key, size - strlen(name) - strlen(addr) - 2);
 
 	char keyname[256 + sizeof(SymmetricKey)] = { 0 };
 	memcpy(keyname, &entry->key, sizeof(SymmetricKey));
