@@ -120,7 +120,7 @@ static void chat_msg_name_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	}
 	
 	LOG_INFO("Client %s set their name to %s", entry->name, name);
-
+	memset(entry->name, 0, sizeof(entry->name));
 	memcpy(entry->name, name, strlen(name));
 
 	char addr_str[INET_ADDRSTRLEN];

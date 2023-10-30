@@ -248,6 +248,7 @@ static void handle_setname_command(ChatClient *data)
 		return;
 	}
 
+	memset(data->name, 0, sizeof(data->name));
 	memcpy(data->name, name, 256);
 	LOG_INFO("Set name to %s", data->name);
 }
@@ -415,11 +416,11 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)text);
 
 #ifdef __linux__
-	if (!is_server) {
+	// if (!is_server) {
 		char notification[1024] = { 0 };
 		snprintf(notification, sizeof(notification), "notify-send \"New message!\" \"You have a new message from %s : %s!\"", name, addr_str);
 		system(notification);
-	}
+	// }
 #endif
 
 	LOG_MSG("-------------------------------------------------------");
@@ -454,6 +455,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	}
 
 	AddrEntry *entry = addr_book_find(data->addr_book, &ext_addr);
+	memset(entry->name, 0, sizeof(entry->name));
 	memcpy(entry->name, name, 256);
 
 	RSA *public_key_rsa = NULL;
@@ -498,6 +500,10 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 
 	char buf[4096] = { 0 };
 	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, buf);
+
+	memset(entry->name, 0, sizeof(entry->name));
+	memset(entry->key.key, 0, sizeof(entry->key.key));
+	memset(entry->key.init_vect, 0, sizeof(entry->key.init_vect));
 
 	memcpy(entry->key.key, buf, sizeof(entry->key.key));
 	memcpy(entry->key.init_vect, buf + sizeof(entry->key.key), sizeof(entry->key.init_vect));
