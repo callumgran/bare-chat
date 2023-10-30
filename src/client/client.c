@@ -406,7 +406,7 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 		memcpy(key.init_vect, entry->key.init_vect, 16);
 	}
 
-	char addr_str[INET_ADDRSTRLEN];
+	char addr_str[INET_ADDRSTRLEN + 5];
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -416,11 +416,11 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)text);
 
 #ifdef __linux__
-	// if (!is_server) {
+	if (!is_server) {
 		char notification[1024] = { 0 };
-		snprintf(notification, sizeof(notification), "notify-send \"New message!\" \"You have a new message from %s : %s!\"", name, addr_str);
+		snprintf(notification, sizeof(notification), "notify-send \"New message!\"", name, addr_str);
 		system(notification);
-	// }
+	}
 #endif
 
 	LOG_MSG("-------------------------------------------------------");
