@@ -86,6 +86,9 @@ void rsa_from_bytes(RSA **key, const unsigned char *bytes, size_t len)
 
 	BIO_write(bio, bytes, len);
 
+	printf("len: %zu\n", len);
+	printf("bytes: %s\n", bytes);
+
 	PEM_read_bio_RSA_PUBKEY(bio, key, NULL, NULL);
 
 	if (*key == NULL) {
