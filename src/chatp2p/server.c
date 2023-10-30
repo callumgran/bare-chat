@@ -61,7 +61,7 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 		return;
 	}
 
-	char addr_str[INET_ADDRSTRLEN + 5];
+	char addr_str[INET_ADDRSTRLEN + 10];
 	if (addr_to_string(addr_str, client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -123,7 +123,7 @@ static void chat_msg_name_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	memset(entry->name, 0, sizeof(entry->name));
 	memcpy(entry->name, name, strlen(name));
 
-	char addr_str[INET_ADDRSTRLEN + 5];
+	char addr_str[INET_ADDRSTRLEN + 10];
 	if (addr_to_string(addr_str, client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -141,7 +141,7 @@ static void chat_msg_leave_handler(struct sockaddr_in *client_addr, AddrBook *ad
 
 	AddrEntry *entry = addr_book_find(addrs, client_addr);
 
-	char addr_str[INET_ADDRSTRLEN + 5];
+	char addr_str[INET_ADDRSTRLEN + 10];
 	if (addr_to_string(addr_str, client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -254,7 +254,7 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *add
 
 static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket)
 {
-	char addr_str[INET_ADDRSTRLEN + 5];
+	char addr_str[INET_ADDRSTRLEN + 10];
 	if (addr_to_string(addr_str, client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -355,7 +355,7 @@ static void handle_msg(void *arg)
 
 	chat_msg_handler(&msg, &data->client_addr, data->addr_book, data->socket);
 
-	char addr_str[INET_ADDRSTRLEN + 5];
+	char addr_str[INET_ADDRSTRLEN + 10];
 	if (addr_to_string(addr_str, &data->client_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
