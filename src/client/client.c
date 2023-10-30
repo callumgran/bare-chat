@@ -485,7 +485,7 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 		return;
 	}
 
-	char addr_str[INET_ADDRSTRLEN];
+	char addr_str[INET_ADDRSTRLEN + 5];
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -523,7 +523,7 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 		return;
 	}
 
-	char addr_str[INET_ADDRSTRLEN];
+	char addr_str[INET_ADDRSTRLEN + 5];
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -556,7 +556,7 @@ static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadD
 
 static void chat_msg_ping_handler(ClientThreadData *data)
 {
-	char addr_str[INET_ADDRSTRLEN];
+	char addr_str[INET_ADDRSTRLEN + 5];
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
