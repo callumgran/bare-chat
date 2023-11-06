@@ -32,8 +32,7 @@ char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = { "CHAT_MESSAGE_TYPE_
 															 "CHAT_MESSAGE_TYPE_ERROR",
 															 "CHAT_MESSAGE_TYPE_INFO",
 															 "CHAT_MESSAGE_TYPE_PING",
-															 "CHAT_MESSAGE_TYPE_PONG",
-															 "CHAT_MESSAGE_TYPE_UNKNOWN" };
+															 "CHAT_MESSAGE_TYPE_PONG", };
 
 void chat_msg_header_init(struct chat_msg_header_t *header, ChatMessageType type, uint16_t len,
 						  uint32_t server_key)
@@ -158,7 +157,7 @@ void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *addr)
 	}
 }
 
-void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr, SymmetricKey *key)
+void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr, SymmetricKey *key, int server_header_key)
 {
 	if (addr == NULL)
 		return;
@@ -170,16 +169,16 @@ void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *ad
 	msg.body = NULL;
 	if (text != NULL) {
 		msg.body = buffer;
-		len = s_encrypt_data(key, text, strlen(text), msg.body);
+		len = s_encrypt_data(key, (unsigned char *)text, strlen(text), (unsigned char *)msg.body);
 	}
 	msg.header.type = CHAT_MESSAGE_TYPE_TEXT;
-	msg.header.server_key = SERVER_KEY;
+	msg.header.server_key = server_header_key;
 	msg.header.len = len;
 
 	chat_msg_send(&msg, socket, addr);
 }
 
-void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr)
+void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr, int server_header_key)
 {
 	if (addr == NULL)
 		return;
@@ -187,7 +186,7 @@ void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr)
 	ChatMessage msg = { 0 };
 	msg.header.type = CHAT_MESSAGE_TYPE_TEXT;
 	msg.header.len = text == NULL ? 0 : strlen(text);
-	msg.header.server_key = SERVER_KEY;
+	msg.header.server_key = server_header_key;
 	msg.body = text;
 
 	chat_msg_send(&msg, socket, addr);

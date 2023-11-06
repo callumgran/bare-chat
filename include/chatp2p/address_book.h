@@ -25,10 +25,12 @@
 
 #define SEC_TO_NS(sec) ((sec)*1000000000)
 #define MAX_GONE_TIME_NS SEC_TO_NS(300)
+#define IP_PORT_MAX_LEN 22 // Maximum length of an ip address and port string
+#define NAME_MAX_LEN 256 // Maximum length of a client name
 
 typedef struct address_book_entry_t {
 	struct sockaddr_in addr;
-	char name[256];
+	char name[NAME_MAX_LEN];
 	struct timespec last_seen;
 	struct address_book_entry_t *prev;
 	struct address_book_entry_t *next;

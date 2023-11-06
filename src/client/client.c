@@ -59,7 +59,7 @@ static void send_ping_to_addr(void *arg, void *data)
 {
 	AddrEntry *addr = arg;
 	PingData *pd = data;
-	char buf[20];
+	char buf[IP_PORT_MAX_LEN] = { 0 };
 	addr_to_string(buf, &addr->addr);
 	chat_msg_send(pd->msg, pd->socket, &addr->addr);
 }
@@ -68,7 +68,7 @@ static void ping_loop(void *arg)
 {
 	ChatClient *data = (ChatClient *)arg;
 	ChatMessage ping;
-	chat_msg_init(&ping, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+	chat_msg_init(&ping, CHAT_MESSAGE_TYPE_PING, 0, data->server_header_key, NULL);
 
 	uint32_t i = 0;
 
@@ -101,7 +101,7 @@ static bool string_eq(const char *fst, const char *snd)
 static void handle_leave_command(ChatClient *data)
 {
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_LEAVE, 0, SERVER_KEY, NULL);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_LEAVE, 0, data->server_header_key, NULL);
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 	data->connected = false;
 	LOG_INFO("Disconnected from server");
@@ -110,7 +110,7 @@ static void handle_leave_command(ChatClient *data)
 static void handle_info_command(ChatClient *data)
 {
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_INFO, 0, SERVER_KEY, NULL);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_INFO, 0, data->server_header_key, NULL);
 	chat_msg_send(&msg, data->socket, &data->server_addr);
 }
 
@@ -122,10 +122,8 @@ static void check_client_connected(void *arg)
 	}
 }
 
-// TODO: Find correct buffer size
-static void handle_join_command(ChatClient *data)
+static void handle_join_command(ChatClient *data, char *addr)
 {
-	char *addr = strtok(NULL, "\n");
 	if (addr == NULL) {
 		LOG_ERR("Invalid arguments for join command");
 		print_help();
@@ -138,7 +136,7 @@ static void handle_join_command(ChatClient *data)
 		return;
 	}
 
-	char public_key[512] = { 0 };
+	unsigned char public_key[RSA_PUB_KEY_BYTES + 1] = { 0 };
 
 	ChatMessage msg = { 0 };
 	if (data->key_pair.public_key == NULL) {
@@ -146,9 +144,9 @@ static void handle_join_command(ChatClient *data)
 		return;
 	}
 
-	size_t len = rsa_to_bytes(data->key_pair.public_key, (unsigned char *)public_key);
+	size_t len = rsa_to_bytes(data->key_pair.public_key, public_key);
 
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_JOIN, len, SERVER_KEY, public_key);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_JOIN, len, data->server_header_key, (char *)public_key);
 
 	LOG_INFO("Sending join message to server...\n");
 	LOG_INFO("Server addr: %s\n", inet_ntoa(data->server_addr.sin_addr));
@@ -158,9 +156,8 @@ static void handle_join_command(ChatClient *data)
 }
 
 // TODO fix all this naming lmao and buffer size
-static void handle_connect_command(ChatClient *data)
+static void handle_connect_command(ChatClient *data, char *addr)
 {
-	char *addr = strtok(NULL, "\n");
 	if (addr == NULL) {
 		LOG_ERR("Invalid arguments for connect command");
 		print_help();
@@ -174,17 +171,21 @@ static void handle_connect_command(ChatClient *data)
 		return;
 	}
 
-	char body[INET_ADDRSTRLEN + 10 + 512];
+	char body[CHAT_CONNECT_MESSAGE_SIZE] = { 0 };
 	addr_to_string(body, &ext_addr);
-	size_t addr_size = strlen(body);
-	strcat(body, "|");
+	body[strlen(body)] = '|';
 	size_t len = rsa_to_bytes(data->key_pair.public_key, (unsigned char *)(body + strlen(body)));
 
-	char buffer[4096] = { 0 };
-	int size = s_encrypt_data(&data->server_key, (unsigned char *)body, addr_size + len, (unsigned char *)buffer);
+	if (len == 0) {
+		LOG_ERR("Failed to convert public key to bytes");
+		return;
+	}
+
+	char enc_buf[737] = { 0 };
+	int enc_size = s_encrypt_data(&data->server_key, (unsigned char *)body, strlen(body), (unsigned char *)enc_buf);
 
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, size, SERVER_KEY, buffer);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, enc_size, data->server_header_key, enc_buf);
 
 	LOG_INFO("Sending connect message to other user...\n");
 	LOG_INFO("User addr: %s\n", inet_ntoa(ext_addr.sin_addr));
@@ -192,13 +193,12 @@ static void handle_connect_command(ChatClient *data)
 
 	// Send connect message to other user at the same time to utilize UDP hole punching
 	ChatMessage ext_msg = { 0 };
-	chat_msg_init(&ext_msg, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+	chat_msg_init(&ext_msg, CHAT_MESSAGE_TYPE_PING, 0, data->server_header_key, NULL);
 	chat_msg_send(&ext_msg, data->socket, &ext_addr);
 }
 
-static void handle_disconnect_command(ChatClient *data)
+static void handle_disconnect_command(ChatClient *data, char *addr)
 {
-	char *addr = strtok(NULL, " ");
 	if (addr == NULL) {
 		LOG_ERR("Invalid arguments for disconnect command");
 		print_help();
@@ -220,7 +220,7 @@ static void handle_disconnect_command(ChatClient *data)
 	addr_book_remove(data->addr_book, &ext_addr);
 
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, data->server_header_key, NULL);
 	LOG_INFO("Sending disconnect message to other user...\n");
 	chat_msg_send(&msg, data->socket, &ext_addr);
 	LOG_INFO("The other user should now be unable to send you messages");
@@ -233,15 +233,14 @@ static void handle_list_command(ChatClient *data)
 		return;
 	}
 
-	char buffer[4096] = { 0 };
+	char buffer[CHAT_MESSAGE_MAX_LEN] = { 0 };
 
 	addr_book_to_string(buffer, data->addr_book, NULL);
 	LOG_INFO("%s", buffer);
 }
 
-static void handle_setname_command(ChatClient *data)
+static void handle_setname_command(ChatClient *data, char *name)
 {
-	char *name = strtok(NULL, "\n");
 	if (name == NULL) {
 		LOG_ERR("Invalid arguments for setname command");
 		print_help();
@@ -249,20 +248,19 @@ static void handle_setname_command(ChatClient *data)
 	}
 
 	memset(data->name, 0, sizeof(data->name));
-	memcpy(data->name, name, 256);
+	strncpy(data->name, name, strlen(name));
+
 	LOG_INFO("Set name to %s", data->name);
 }
 
-static void handle_msg_command(ChatClient *data)
+static void handle_msg_command(ChatClient *data, char *addr, char *msg)
 {
-	char *addr = strtok(NULL, " ");
 	if (addr == NULL) {
 		LOG_ERR("Invalid arguments for msg command");
 		print_help();
 		return;
 	}
 
-	char *msg = strtok(NULL, "\n");
 	if (msg == NULL) {
 		LOG_ERR("Invalid arguments for msg command");
 		print_help();
@@ -288,12 +286,11 @@ static void handle_msg_command(ChatClient *data)
 		return;
 	}
 
-	chat_msg_send_text_enc(msg, data->socket, &ext_addr, &entry->key);
+	chat_msg_send_text_enc(msg, data->socket, &ext_addr, &entry->key, data->server_header_key);
 }
 
-static void handle_ping_command(ChatClient *data)
+static void handle_ping_command(ChatClient *data, char *addr)
 {
-	char *addr = strtok(NULL, "\n");
 	if (addr == NULL) {
 		LOG_ERR("Invalid arguments for ping command");
 		print_help();
@@ -308,7 +305,7 @@ static void handle_ping_command(ChatClient *data)
 	}
 
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_PING, 0, SERVER_KEY, NULL);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_PING, 0, data->server_header_key, NULL);
 
 	LOG_INFO("Sending ping message to other address %s...\n", addr);
 	chat_msg_send(&msg, data->socket, &ext_addr);
@@ -321,7 +318,7 @@ static void disconnect_connection(void *data, void *arg)
 	ChatClient *client = arg;
 
 	ChatMessage msg = { 0 };
-	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, SERVER_KEY, NULL);
+	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_DISCONNECT, 0, client->server_header_key, NULL);
 
 	chat_msg_send(&msg, client->socket, &entry->addr);
 	addr_book_remove(client->addr_book, &entry->addr);
@@ -342,10 +339,11 @@ static void user_command_loop(void *arg)
 	ChatClient *data = (ChatClient *)arg;
 	printf("Welcome to chatp2p client!\n");
 	print_help();
-	char buf[65536] = { 0 };
+	char buf[CHAT_MESSAGE_MAX_LEN] = { 0 };
+	char *save_ptr = NULL;
 	while (data->running) {
 		if (fgets(buf, sizeof(buf), stdin) != NULL) {
-			char *command = strtok(buf, " ");
+			char *command = strtok_r(buf, " ", &save_ptr);
 			if (command == NULL) {
 				print_help();
 				continue;
@@ -358,21 +356,28 @@ static void user_command_loop(void *arg)
 			} else if (string_eq(command, INFO_COMMAND)) {
 				handle_info_command(data);
 			} else if (string_eq(command, JOIN_COMMAND)) {
-				handle_join_command(data);
+				char *addr = strtok_r(NULL, "\n", &save_ptr);
+				handle_join_command(data, addr);
 			} else if (string_eq(command, LEAVE_COMMAND)) {
 				handle_leave_command(data);
 			} else if (string_eq(command, CONNECT_COMMAND)) {
-				handle_connect_command(data);
+				char *addr = strtok_r(NULL, "\n", &save_ptr);
+				handle_connect_command(data, addr);
 			} else if (string_eq(command, DISCONNECT_COMMAND)) {
-				handle_disconnect_command(data);
+				char *addr = strtok_r(NULL, "\n", &save_ptr);
+				handle_disconnect_command(data, addr);
 			} else if (string_eq(command, LIST_COMMAND)) {
 				handle_list_command(data);
 			} else if (string_eq(command, SETNAME_COMMAND)) {
-				handle_setname_command(data);
+				char *name = strtok_r(NULL, "\n", &save_ptr);
+				handle_setname_command(data, name);
 			} else if (string_eq(command, MSG_COMMAND)) {
-				handle_msg_command(data);
+				char *addr = strtok_r(NULL, " ", &save_ptr);
+				char *msg = strtok_r(NULL, "\n", &save_ptr);
+				handle_msg_command(data, addr, msg);
 			} else if (string_eq(command, PING_COMMAND)) {
-				handle_ping_command(data);
+				char *addr = strtok_r(NULL, "\n", &save_ptr);
+				handle_ping_command(data, addr);
 			} else {
 				LOG_ERR("Unknown command: '%s'", command);
 				print_help();
@@ -406,40 +411,49 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 		memcpy(key.init_vect, entry->key.init_vect, 16);
 	}
 
-	char addr_str[INET_ADDRSTRLEN + 10];
+	char addr_str[IP_PORT_MAX_LEN] = { 0 };
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
 	}
 
-	char text[65536] = { 0 };
-	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)text);
+	char dec_out[CHAT_MESSAGE_MAX_LEN] = { 0 };
+	s_decrypt_data(&key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)dec_out);
 
 #ifdef __linux__
 	if (!is_server) {
 		char notification[1024] = { 0 };
-		snprintf(notification, sizeof(notification), "notify-send \"New message!\"", name, addr_str);
+		snprintf(notification, sizeof(notification), "notify-send \"New message from %s|%s!\"", name, addr_str);
 		system(notification);
 	}
 #endif
 
 	LOG_MSG("-------------------------------------------------------");
 	LOG_MSG("Received message from %s : %s", name, addr_str);
-	LOG_MSG("Message: %s", text);
+	LOG_MSG("Message: %s", dec_out);
 	LOG_MSG("-------------------------------------------------------");
 }
 
 // TODO: Find correct buffer size and fix naming
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	char buf[4096] = { 0 };
+	char buf[CHAT_CONNECT_MESSAGE_SIZE] = { 0 };
 	int size = s_decrypt_data(data->server_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
 
-	char *name = strtok(buf, "|");
-	char *addr = strtok(NULL, "|");
-	char *public_key = buf + strlen(name) + strlen(addr) + 2;
-	if (*public_key == '|') {
-		public_key++;
+	if (size < 0) {
+		LOG_ERR("Failed to decrypt connect message");
+		return;
+	}
+
+	char *save_ptr = NULL;
+
+	char *name = strtok_r(buf, "|", &save_ptr);
+	char *addr = strtok_r(NULL, "|", &save_ptr);
+	char *public_key = strtok_r(NULL, "", &save_ptr);
+	
+	if (name == NULL || addr == NULL || public_key == NULL) {
+		LOG_ERR("Invalid connect message");
+		return;
 	}
 
 	struct sockaddr_in ext_addr = { 0 };
@@ -460,22 +474,23 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 
 	AddrEntry *entry = addr_book_find(data->addr_book, &ext_addr);
 	memset(entry->name, 0, sizeof(entry->name));
-	memcpy(entry->name, name, 256);
+	strncpy(entry->name, name, strlen(name));
 
 	RSA *public_key_rsa = NULL;
 
-	char buffer[4096] = { 0 };
-	rsa_from_bytes(&public_key_rsa, (unsigned char *)public_key, size - strlen(name) - strlen(addr) - 2);
+	char buffer[737] = { 0 };
+	rsa_from_bytes(&public_key_rsa, (unsigned char *)public_key, strlen(public_key));
 
-	char keyname[256 + sizeof(SymmetricKey)] = { 0 };
-	memcpy(keyname, &entry->key, sizeof(SymmetricKey));
+	char keyname[NAME_MAX_LEN + sizeof(SymmetricKey)] = { 0 };
+	memcpy(keyname, entry->key.key, 32);
+	memcpy(keyname + 32, entry->key.init_vect, 16);
 	memcpy(keyname + sizeof(SymmetricKey), data->name, strlen(data->name));
 
 	int len = as_encrypt_data(public_key_rsa, (unsigned char *)keyname, sizeof(SymmetricKey) + strlen(data->name),
 							  (unsigned char *)buffer);
 
 	ChatMessage connect = { 0 };
-	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, len, SERVER_KEY,
+	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, len, data->server_header_key,
 				  buffer);
 
 	chat_msg_send(&connect, data->socket, &ext_addr);
@@ -489,7 +504,7 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 		return;
 	}
 
-	char addr_str[INET_ADDRSTRLEN + 10];
+	char addr_str[IP_PORT_MAX_LEN] = { 0 };
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -502,18 +517,18 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 
 	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
 
-	char buf[4096] = { 0 };
-	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, buf);
-
+	char buf[NAME_MAX_LEN + sizeof(SymmetricKey)] = { 0 };
+	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
+	
 	memset(entry->name, 0, sizeof(entry->name));
 	memset(entry->key.key, 0, sizeof(entry->key.key));
 	memset(entry->key.init_vect, 0, sizeof(entry->key.init_vect));
 
-	memcpy(entry->key.key, buf, sizeof(entry->key.key));
-	memcpy(entry->key.init_vect, buf + sizeof(entry->key.key), sizeof(entry->key.init_vect));
+	memcpy(entry->key.key, buf, 32);
+	memcpy(entry->key.init_vect, buf + 32, 16);
 	memcpy(entry->name, buf + sizeof(SymmetricKey), size - sizeof(SymmetricKey));
 
-	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key);
+	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key, data->server_header_key);
 
 	LOG_INFO(
 		"Client %s with nickname %s received your connection request, you can now communicate by name :)",
@@ -527,7 +542,7 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 		return;
 	}
 
-	char addr_str[INET_ADDRSTRLEN + 10];
+	char addr_str[IP_PORT_MAX_LEN] = { 0 };
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -541,17 +556,18 @@ static void chat_msg_disconnect_handler(ClientThreadData *data)
 // TODO: Find correct buffer size and fix naming
 static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	char buf[4096] = { 0 };
+	unsigned char buf[sizeof(SymmetricKey)] = { 0 };
 
-	as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
+	int dec_size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, buf);
 
-	memcpy(data->server_key, buf, sizeof(SymmetricKey));
+	memcpy(data->server_key->key, buf, 32);
+	memcpy(data->server_key->init_vect, buf + 32, 16);
 
 	char response[272] = { 0 };
 	int size = s_encrypt_data(data->server_key, (unsigned char *)data->name, strlen(data->name), (unsigned char *)response);
 
 	ChatMessage ret = { 0 };
-	chat_msg_init(&ret, CHAT_MESSAGE_TYPE_NAME, size, SERVER_KEY, response);
+	chat_msg_init(&ret, CHAT_MESSAGE_TYPE_NAME, size, data->server_header_key, response);
 	chat_msg_send(&ret, data->socket, &data->server_addr);
 
 	*(data->connected) = true;
@@ -560,7 +576,7 @@ static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadD
 
 static void chat_msg_ping_handler(ClientThreadData *data)
 {
-	char addr_str[INET_ADDRSTRLEN + 10];
+	char addr_str[IP_PORT_MAX_LEN] = { 0 };
 	if (addr_to_string(addr_str, &data->ext_addr) < 0) {
 		LOG_ERR("Could not convert address to string");
 		return;
@@ -578,7 +594,7 @@ static void chat_msg_ping_handler(ClientThreadData *data)
 	clock_gettime(CLOCK_MONOTONIC, &entry->last_seen);
 
 	ChatMessage pong = { 0 };
-	chat_msg_init(&pong, CHAT_MESSAGE_TYPE_PONG, 0, SERVER_KEY, NULL);
+	chat_msg_init(&pong, CHAT_MESSAGE_TYPE_PONG, 0, data->server_header_key, NULL);
 
 	chat_msg_send(&pong, data->socket, &data->ext_addr);
 }
@@ -601,8 +617,10 @@ static void chat_msg_error_handler(const ChatMessage *msg, ClientThreadData *dat
 
 static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 {
-	if (msg->header.server_key != SERVER_KEY) {
+	if (msg->header.server_key != data->server_header_key) {
 		LOG_ERR("Invalid key in message received");
+		LOG_INFO("Key: %u", msg->header.server_key);
+		LOG_INFO("Expected key: %u", data->server_header_key);
 		return;
 	}
 
@@ -635,9 +653,6 @@ static void chat_msg_handler(const ChatMessage *msg, ClientThreadData *data)
 		break;
 	case CHAT_MESSAGE_TYPE_PONG:
 		break;
-	case CHAT_MESSAGE_TYPE_UNKNOWN:
-		chat_msg_unknown_handler(msg, data);
-		break;
 	default:
 		chat_msg_unknown_handler(msg, data);
 		break;
@@ -649,11 +664,6 @@ static void handle_receive_msg(void *arg)
 	ClientThreadData *data = (ClientThreadData *)arg;
 	ChatMessage msg = { 0 };
 	chat_msg_from_string(&msg, data->buffer, data->len);
-
-	if (msg.header.server_key != SERVER_KEY) {
-		LOG_ERR("Invalid key in message received");
-		return;
-	}
 
 	chat_msg_handler(&msg, data);
 
@@ -716,6 +726,8 @@ int client_init(ChatClient *client, char *env_file)
 		return -1;
 	}
 
+	client->server_header_key = atoi(env_get_val(env_vars, "SERVER_HEADER_KEY"));
+
 	env_vars_free(env_vars);
 
 	return 0;
@@ -746,7 +758,7 @@ int client_run(ChatClient *client)
 
 	int nfds = client->socket + 1;
 	fd_set readfds;
-	char buffer[65536] = { 0 };
+	char buffer[CHAT_MESSAGE_MAX_LEN] = { 0 };
 
 	set_nonblocking(nfds);
 
@@ -754,7 +766,7 @@ int client_run(ChatClient *client)
 		if (!check_fd(nfds, client->socket, &readfds))
 			continue;
 
-		memset(buffer, 0, sizeof(buffer));
+		memset(buffer, 0, CHAT_MESSAGE_MAX_LEN);
 		memset(&ext_addr, 0, sizeof(struct sockaddr_in));
 
 		ssize_t recv_len =
@@ -773,6 +785,7 @@ int client_run(ChatClient *client)
 			data->name = client->name;
 			data->server_key = &client->server_key;
 			data->key_pair = &client->key_pair;
+			data->server_header_key = client->server_header_key;
 			submit_worker_task(client->threadpool, handle_receive_msg, (void *)data);
 		} else {
 			LOG_ERR("recvfrom() failed for some reason");

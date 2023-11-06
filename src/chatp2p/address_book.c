@@ -295,7 +295,7 @@ bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockadd
 			}
 		}
 
-		char addr_str[INET_ADDRSTRLEN + 10];
+		char addr_str[IP_PORT_MAX_LEN];
 		addr_to_string(addr_str, &node->addr);
 
 		offset += sprintf(buffer + offset, "%s: %s\n", node->name, addr_str);
@@ -333,7 +333,7 @@ void addr_book_foreach(AddrBook *dll, void (*exec)(void *, void *), void *args)
 
 	while (true) {
 		exec(addr_book_get(&iter), args);
-		if (!addr_book_has_next(&iter))
+		if (addr_book_get(&iter) || !addr_book_has_next(&iter))
 			break;
 		addr_book_next(&iter);
 	}
