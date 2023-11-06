@@ -16,7 +16,6 @@ LDLIBS = -lm -lssl -lcrypto -lreadline
 TARGET = server
 TARGET-FUZZ = server-fuzz
 CLIENT = client
-CLIENT-FUZZ = client-fuzz
 
 all: $(TARGET)
 
@@ -51,7 +50,7 @@ client-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined
 client-asan: client
 
 clean:
-	rm -rf $(OBJDIR) $(TARGET) $(CLIENT)
+	rm -rf $(OBJDIR) $(TARGET) $(CLIENT) $(TARGET-FUZZ)
 
 tags:
 	@ctags -R

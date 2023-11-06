@@ -318,7 +318,7 @@ static void chat_msg_unknown_handler(ChatMessage *msg, ClientThreadData *data)
 {
 	(void)msg;
 	(void)data;
-	LOG_ERR("Unknown message type");
+	// TODO: This will be how clients handle unknown messages
 }
 
 // TODO: Find out if this is even needed
