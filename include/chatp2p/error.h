@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2023 Nicolai Brand
+ *  Copyright (C) 2023 Callum Gran
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,25 +15,27 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef CHAT_ERROR_H
+#define CHAT_ERROR_H
 
-#include <stdio.h>
+typedef enum {
+	CHAT_BAD_ADDRESS,
+	CHAT_NO_ENTRY,
+	CHAT_DECRYPT_ERROR,
+	CHAT_INVALID_CONNECT_MSG,
+	CHAT_ALREADY_CONNECTED,
+	CHAT_ADDR_BOOK_ERROR,
+	CHAT_CONNECTION_DENIED,
+	CHAT_BAD_PING,
+    CHAT_INVALID_SERVER_KEY,
+    CHAT_INVALID_MESSAGE_TYPE,
+	CHAT_ERROR_COUNT
+} ChatErrorType;
 
-#define LOG_INFO(...)                         \
-	({                                        \
-		fprintf(stdout, "\033[0;33m[LOG]: "); \
-		fprintf(stdout, __VA_ARGS__);         \
-		fprintf(stdout, "\033[0m\n");         \
-		fflush(stdout);                       \
-	})
+typedef void MessageErrorHandler(void *data);
 
-#define LOG_ERR(...)                          \
-	({                                        \
-		fprintf(stderr, "\033[0;31m[ERR]: "); \
-		fprintf(stderr, __VA_ARGS__);         \
-		fprintf(stderr, "\033[0m\n");         \
-		fflush(stderr);                       \
-	})
+extern MessageErrorHandler *message_error_handlers[CHAT_ERROR_COUNT];
 
-#endif
+void chat_handle_message_error(ChatErrorType type, void *data);
+
+#endif // CHAT_ERROR_H

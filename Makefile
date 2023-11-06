@@ -10,7 +10,7 @@ OBJS := $(SRCS:%.c=$(OBJDIR)/%.o)
 CFLAGS = -Iinclude -Wall -Wextra -Wshadow -std=c11 -g -D_POSIX_C_SOURCE=200809L
 CFLAGS += -DLOGGING
 LDFLAGS = -pthread
-LDLIBS = -lm -lssl -lcrypto
+LDLIBS = -lm -lssl -lcrypto -lreadline
 
 .PHONY: format clean tags bear $(OBJDIR)
 TARGET = server
@@ -43,7 +43,7 @@ server-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined
 server-asan: $(TARGET-FUZZ)
 
 client:
-	$(CC) $(CFLAGS) -o $(CLIENT) src/client/chat_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/client/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c src/encrypt/encrypt.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $(CLIENT) src/client/terminal_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/chatp2p/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c src/encrypt/encrypt.c src/chatp2p/error.c $(LDLIBS)
 
 client-asan: CFLAGS += -fsanitize=address -fsanitize=undefined
 client-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined

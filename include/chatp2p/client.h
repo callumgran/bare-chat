@@ -26,33 +26,6 @@
 #define CLIENT_PING_INTERVAL 30 // Iterations
 #define CLIENT_JOIN_TIMEOUT 5 // Seconds
 
-#define CLIENT_HELP_MSG \
-	"Commands:\n\
-	help - Display's the help message\n\
-	quit - Disconnect from all users and exit\n\
-	info - Request all connected users in server address book\n\
-	list - List all connected users in local address book\n\
-	ping <ip:port> - Ping a specific user/server\n\
-	setname <name> - Set your name\n\
-	msg <ip:port> <message> - Send a message to a user\n\
-	msg <name> <message> - Send a message to a user\n\
-	join <ip:port> - Join a server\n\
-	leave - Leave a server\n\
-	connect <ip:port> - Connect to a user\n\
-	disconnect <ip:port> - Disconnect from a user\n"
-
-#define HELP_COMMAND "help"
-#define QUIT_COMMAND "quit"
-#define INFO_COMMAND "info"
-#define LIST_COMMAND "list"
-#define PING_COMMAND "ping"
-#define SETNAME_COMMAND "setname"
-#define MSG_COMMAND "msg"
-#define JOIN_COMMAND "join"
-#define LEAVE_COMMAND "leave"
-#define CONNECT_COMMAND "connect"
-#define DISCONNECT_COMMAND "disconnect"
-
 typedef struct {
 	int socket;
 	bool connected;
@@ -86,9 +59,13 @@ typedef struct {
 	ChatMessage *msg;
 } PingData;
 
+typedef bool MessageRecvExtraHandler(void *data);
+
+extern MessageRecvExtraHandler *extra_message_handlers[CHAT_MESSAGE_TYPE_COUNT];
+
 int client_init(ChatClient *client, char *env_file);
 
-int client_run(ChatClient *client);
+int client_run(ChatClient *client, worker_thread_func *user_command_loop_func);
 
 void client_free(ChatClient *client);
 

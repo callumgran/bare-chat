@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2023 Nicolai Brand
+ *  Copyright (C) 2023 Callum Gran
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,25 +15,14 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#include <chatp2p/error.h>
+#include <stdlib.h>
 
-#include <stdio.h>
+MessageErrorHandler *message_error_handlers[CHAT_ERROR_COUNT] = { NULL, NULL, NULL, NULL,
+																  NULL, NULL, NULL, NULL };
 
-#define LOG_INFO(...)                         \
-	({                                        \
-		fprintf(stdout, "\033[0;33m[LOG]: "); \
-		fprintf(stdout, __VA_ARGS__);         \
-		fprintf(stdout, "\033[0m\n");         \
-		fflush(stdout);                       \
-	})
-
-#define LOG_ERR(...)                          \
-	({                                        \
-		fprintf(stderr, "\033[0;31m[ERR]: "); \
-		fprintf(stderr, __VA_ARGS__);         \
-		fprintf(stderr, "\033[0m\n");         \
-		fflush(stderr);                       \
-	})
-
-#endif
+void chat_handle_message_error(ChatErrorType type, void *data)
+{
+	if (type < CHAT_ERROR_COUNT && message_error_handlers[type] != NULL)
+		message_error_handlers[type](data);
+}

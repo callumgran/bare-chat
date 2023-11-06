@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "list.h"
+#include <lib/list.h>
 
 static bool increase_capacity(List *list)
 {
