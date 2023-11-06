@@ -1,7 +1,7 @@
 # Bare Chat
 
 ## Introduction
-This is a simple command-line based peer-to-peer (P2P) chat service written in C in about 10 hours (this is reflected in the quality atm).
+This is a simple command-line based peer-to-peer (P2P) chat service written in C.
 
 ## Prerequisites
 Before you can compile and run the P2P chat service, ensure you atleast have the following prerequisites installed on your system:
