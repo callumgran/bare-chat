@@ -18,7 +18,7 @@
 #include <arpa/inet.h>
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
-#include <client/client.h>
+#include <chatp2p/client.h>
 #include <encrypt/encrypt.h>
 #include <fcntl.h>
 #include <lib/env_parser.h>
@@ -30,6 +30,8 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+
 
 static void set_nonblocking(int socket)
 {
