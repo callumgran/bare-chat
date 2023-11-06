@@ -16,11 +16,11 @@
  */
 
 #include <encrypt/encrypt.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
-#include <openssl/err.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,8 +41,7 @@ bool key_pair_init(KeyPair *key_pair, const char *public_key_path, const char *p
 	}
 
 	key_pair->public_key = PEM_read_RSA_PUBKEY(public_key_file, NULL, NULL, NULL);
-	key_pair->private_key =
-		PEM_read_RSAPrivateKey(private_key_file, NULL, NULL, NULL);
+	key_pair->private_key = PEM_read_RSAPrivateKey(private_key_file, NULL, NULL, NULL);
 
 	if (key_pair->public_key == NULL || key_pair->private_key == NULL) {
 		return false;
@@ -85,7 +84,7 @@ void rsa_from_bytes(RSA **key, const unsigned char *bytes, size_t len)
 	BIO *bio = BIO_new(BIO_s_mem());
 
 	BIO_write(bio, bytes, len);
-	
+
 	PEM_read_bio_RSA_PUBKEY(bio, key, NULL, NULL);
 
 	if (*key == NULL) {

@@ -17,14 +17,15 @@
 #ifndef CHAT_MESSAGE_H
 #define CHAT_MESSAGE_H
 
+#include <chatp2p/address_book.h>
+#include <encrypt/encrypt.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <chatp2p/address_book.h>
-#include <encrypt/encrypt.h>
 
 #define CHAT_MESSAGE_MAX_LEN UINT16_MAX + 1 // Maximum length of a chat message
-#define CHAT_CONNECT_MESSAGE_SIZE 451 + NAME_MAX_LEN + IP_PORT_MAX_LEN + 3 // Size of a connect message
+#define CHAT_CONNECT_MESSAGE_SIZE \
+	451 + NAME_MAX_LEN + IP_PORT_MAX_LEN + 3 // Size of a connect message
 
 typedef enum {
 	CHAT_MESSAGE_TYPE_TEXT = 0, // Used for sending text messages to other clients
@@ -87,8 +88,10 @@ void chat_msg_free(ChatMessage *msg);
 
 void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *client_addr);
 
-void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *client_addr, int server_header_key);
+void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *client_addr,
+						int server_header_key);
 
-void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr, SymmetricKey *key, int server_header_key);
+void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr,
+							SymmetricKey *key, int server_header_key);
 
 #endif // CHAT_MESSAGE_H

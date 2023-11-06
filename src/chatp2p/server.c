@@ -76,8 +76,7 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	}
 
 	unsigned char ret_buf[ENCRYPTED_SYMMETRIC_KEY_LEN] = { 0 };
-	int size =
-		as_encrypt_data(key, (unsigned char *)&entry->key, sizeof(SymmetricKey), ret_buf);
+	int size = as_encrypt_data(key, (unsigned char *)&entry->key, sizeof(SymmetricKey), ret_buf);
 
 	if (size < 0) {
 		LOG_ERR("Could not encrypt data");
@@ -87,7 +86,8 @@ static void chat_msg_join_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	}
 
 	ChatMessage response = { 0 };
-	chat_msg_init(&response, CHAT_MESSAGE_TYPE_JOIN_RESPONSE, size, server_header_key, (char *)ret_buf);
+	chat_msg_init(&response, CHAT_MESSAGE_TYPE_JOIN_RESPONSE, size, server_header_key,
+				  (char *)ret_buf);
 
 	chat_msg_send(&response, socket, client_addr);
 
@@ -110,13 +110,14 @@ static void chat_msg_name_handler(const ChatMessage *msg, struct sockaddr_in *cl
 	}
 
 	char name[NAME_MAX_LEN] = { 0 };
-	int size = s_decrypt_data(&entry->key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)name);
-	
+	int size = s_decrypt_data(&entry->key, (unsigned char *)msg->body, msg->header.len,
+							  (unsigned char *)name);
+
 	if (size < 0) {
 		LOG_ERR("Could not decrypt data");
 		return;
 	}
-	
+
 	LOG_INFO("Client %s set their name to %s", entry->name, name);
 	memset(entry->name, 0, sizeof(entry->name));
 	strncpy(entry->name, name, sizeof(entry->name));
@@ -162,7 +163,8 @@ static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in 
 	char *sender_name = entry->name;
 
 	char in_buffer[CHAT_CONNECT_MESSAGE_SIZE] = { 0 };
-	int in_size = s_decrypt_data(&entry->key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)in_buffer);
+	int in_size = s_decrypt_data(&entry->key, (unsigned char *)msg->body, msg->header.len,
+								 (unsigned char *)in_buffer);
 
 	if (in_size < 0) {
 		LOG_ERR("Could not decrypt data");
@@ -197,7 +199,8 @@ static void chat_msg_connect_handler(const ChatMessage *msg, struct sockaddr_in 
 
 	char out_buffer[737] = { 0 };
 
-	int enc_size = s_encrypt_data(&client_entry->key, (unsigned char *)body, strlen(body), (unsigned char *)out_buffer);
+	int enc_size = s_encrypt_data(&client_entry->key, (unsigned char *)body, strlen(body),
+								  (unsigned char *)out_buffer);
 
 	chat_msg_init(&response, CHAT_MESSAGE_TYPE_CONNECT, enc_size, server_header_key, out_buffer);
 
@@ -215,7 +218,8 @@ static void chat_msg_error_handler(const ChatMessage *msg, struct sockaddr_in *c
 	(void)msg;
 }
 
-static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket, uint32_t server_header_key)
+static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket,
+								  uint32_t server_header_key)
 {
 	if (!addr_book_contains(addrs, client_addr)) {
 		LOG_INFO("Client not in address book");
@@ -238,7 +242,8 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *add
 	}
 
 	char ret_buf[CHAT_MESSAGE_MAX_LEN] = { 0 };
-	int size = s_encrypt_data(&entry->key, (unsigned char *)buf, strlen(buf), (unsigned char *)ret_buf);
+	int size =
+		s_encrypt_data(&entry->key, (unsigned char *)buf, strlen(buf), (unsigned char *)ret_buf);
 
 	if (size < 0) {
 		LOG_ERR("Could not encrypt data");
@@ -252,7 +257,8 @@ static void chat_msg_info_handler(struct sockaddr_in *client_addr, AddrBook *add
 	LOG_INFO("Sending address book to client");
 }
 
-static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket, uint32_t server_header_key)
+static void chat_msg_ping_handler(struct sockaddr_in *client_addr, AddrBook *addrs, int socket,
+								  uint32_t server_header_key)
 {
 	char addr_str[IP_PORT_MAX_LEN] = { 0 };
 	if (addr_to_string(addr_str, client_addr) < 0) {
@@ -352,7 +358,8 @@ static void handle_msg(void *arg)
 	ChatMessage msg = { 0 };
 	chat_msg_from_string(&msg, data->buffer, data->len);
 
-	chat_msg_handler(&msg, &data->client_addr, data->addr_book, data->socket, data->server_header_key);
+	chat_msg_handler(&msg, &data->client_addr, data->addr_book, data->socket,
+					 data->server_header_key);
 
 	char addr_str[IP_PORT_MAX_LEN] = { 0 };
 	if (addr_to_string(addr_str, &data->client_addr) < 0) {

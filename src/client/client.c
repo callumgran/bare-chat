@@ -182,7 +182,8 @@ static void handle_connect_command(ChatClient *data, char *addr)
 	}
 
 	char enc_buf[737] = { 0 };
-	int enc_size = s_encrypt_data(&data->server_key, (unsigned char *)body, strlen(body), (unsigned char *)enc_buf);
+	int enc_size = s_encrypt_data(&data->server_key, (unsigned char *)body, strlen(body),
+								  (unsigned char *)enc_buf);
 
 	ChatMessage msg = { 0 };
 	chat_msg_init(&msg, CHAT_MESSAGE_TYPE_CONNECT, enc_size, data->server_header_key, enc_buf);
@@ -423,7 +424,8 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 #ifdef __linux__
 	if (!is_server) {
 		char notification[1024] = { 0 };
-		snprintf(notification, sizeof(notification), "notify-send \"New message from %s|%s!\"", name, addr_str);
+		snprintf(notification, sizeof(notification), "notify-send \"New message from %s|%s!\"",
+				 name, addr_str);
 		system(notification);
 	}
 #endif
@@ -438,7 +440,8 @@ static void chat_msg_text_handler(const ChatMessage *msg, ClientThreadData *data
 static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *data)
 {
 	char buf[CHAT_CONNECT_MESSAGE_SIZE] = { 0 };
-	int size = s_decrypt_data(data->server_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
+	int size = s_decrypt_data(data->server_key, (unsigned char *)msg->body, msg->header.len,
+							  (unsigned char *)buf);
 
 	if (size < 0) {
 		LOG_ERR("Failed to decrypt connect message");
@@ -450,7 +453,7 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	char *name = strtok_r(buf, "|", &save_ptr);
 	char *addr = strtok_r(NULL, "|", &save_ptr);
 	char *public_key = strtok_r(NULL, "", &save_ptr);
-	
+
 	if (name == NULL || addr == NULL || public_key == NULL) {
 		LOG_ERR("Invalid connect message");
 		return;
@@ -486,8 +489,8 @@ static void chat_msg_connect_handler(const ChatMessage *msg, ClientThreadData *d
 	memcpy(keyname + 32, entry->key.init_vect, 16);
 	memcpy(keyname + sizeof(SymmetricKey), data->name, strlen(data->name));
 
-	int len = as_encrypt_data(public_key_rsa, (unsigned char *)keyname, sizeof(SymmetricKey) + strlen(data->name),
-							  (unsigned char *)buffer);
+	int len = as_encrypt_data(public_key_rsa, (unsigned char *)keyname,
+							  sizeof(SymmetricKey) + strlen(data->name), (unsigned char *)buffer);
 
 	ChatMessage connect = { 0 };
 	chat_msg_init(&connect, CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, len, data->server_header_key,
@@ -518,8 +521,9 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 	AddrEntry *entry = addr_book_find(data->addr_book, &data->ext_addr);
 
 	char buf[NAME_MAX_LEN + sizeof(SymmetricKey)] = { 0 };
-	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, (unsigned char *)buf);
-	
+	int size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body,
+							   msg->header.len, (unsigned char *)buf);
+
 	memset(entry->name, 0, sizeof(entry->name));
 	memset(entry->key.key, 0, sizeof(entry->key.key));
 	memset(entry->key.init_vect, 0, sizeof(entry->key.init_vect));
@@ -528,7 +532,8 @@ static void chat_msg_connect_response_handler(const ChatMessage *msg, ClientThre
 	memcpy(entry->key.init_vect, buf + 32, 16);
 	memcpy(entry->name, buf + sizeof(SymmetricKey), size - sizeof(SymmetricKey));
 
-	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key, data->server_header_key);
+	chat_msg_send_text_enc("Howdy new partner!", data->socket, &data->ext_addr, &entry->key,
+						   data->server_header_key);
 
 	LOG_INFO(
 		"Client %s with nickname %s received your connection request, you can now communicate by name :)",
@@ -558,13 +563,15 @@ static void chat_msg_join_response_handler(const ChatMessage *msg, ClientThreadD
 {
 	unsigned char buf[sizeof(SymmetricKey)] = { 0 };
 
-	int dec_size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body, msg->header.len, buf);
+	int dec_size = as_decrypt_data(data->key_pair->private_key, (unsigned char *)msg->body,
+								   msg->header.len, buf);
 
 	memcpy(data->server_key->key, buf, 32);
 	memcpy(data->server_key->init_vect, buf + 32, 16);
 
 	char response[272] = { 0 };
-	int size = s_encrypt_data(data->server_key, (unsigned char *)data->name, strlen(data->name), (unsigned char *)response);
+	int size = s_encrypt_data(data->server_key, (unsigned char *)data->name, strlen(data->name),
+							  (unsigned char *)response);
 
 	ChatMessage ret = { 0 };
 	chat_msg_init(&ret, CHAT_MESSAGE_TYPE_NAME, size, data->server_header_key, response);

@@ -17,22 +17,24 @@
 
 #include <arpa/inet.h>
 #include <chatp2p/chat_msg.h>
-#include <lib/logger.h>
 #include <encrypt/encrypt.h>
+#include <lib/logger.h>
 #include <string.h>
 
-char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = { "CHAT_MESSAGE_TYPE_TEXT",
-															 "CHAT_MESSAGE_TYPE_JOIN",
-															 "CHAT_MESSAGE_TYPE_JOIN_RESPONSE",
-															 "CHAT_MESSAGE_TYPE_NAME",
-															 "CHAT_MESSAGE_TYPE_LEAVE",
-															 "CHAT_MESSAGE_TYPE_CONNECT",
-															 "CHAT_MESSAGE_TYPE_CONNECT_RESPONSE",
-															 "CHAT_MESSAGE_TYPE_DISCONNECT",
-															 "CHAT_MESSAGE_TYPE_ERROR",
-															 "CHAT_MESSAGE_TYPE_INFO",
-															 "CHAT_MESSAGE_TYPE_PING",
-															 "CHAT_MESSAGE_TYPE_PONG", };
+char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT] = {
+	"CHAT_MESSAGE_TYPE_TEXT",
+	"CHAT_MESSAGE_TYPE_JOIN",
+	"CHAT_MESSAGE_TYPE_JOIN_RESPONSE",
+	"CHAT_MESSAGE_TYPE_NAME",
+	"CHAT_MESSAGE_TYPE_LEAVE",
+	"CHAT_MESSAGE_TYPE_CONNECT",
+	"CHAT_MESSAGE_TYPE_CONNECT_RESPONSE",
+	"CHAT_MESSAGE_TYPE_DISCONNECT",
+	"CHAT_MESSAGE_TYPE_ERROR",
+	"CHAT_MESSAGE_TYPE_INFO",
+	"CHAT_MESSAGE_TYPE_PING",
+	"CHAT_MESSAGE_TYPE_PONG",
+};
 
 void chat_msg_header_init(struct chat_msg_header_t *header, ChatMessageType type, uint16_t len,
 						  uint32_t server_key)
@@ -122,7 +124,7 @@ ssize_t chat_msg_to_string(const ChatMessage *msg, char *buffer, size_t len)
 
 	if (msg->body == NULL)
 		return idx;
-	
+
 	memcpy(buffer + idx, msg->body, msg->header.len);
 	idx += msg->header.len;
 
@@ -157,7 +159,8 @@ void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *addr)
 	}
 }
 
-void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr, SymmetricKey *key, int server_header_key)
+void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr,
+							SymmetricKey *key, int server_header_key)
 {
 	if (addr == NULL)
 		return;
@@ -178,7 +181,8 @@ void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *ad
 	chat_msg_send(&msg, socket, addr);
 }
 
-void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr, int server_header_key)
+void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *addr,
+						int server_header_key)
 {
 	if (addr == NULL)
 		return;
