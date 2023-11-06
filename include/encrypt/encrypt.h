@@ -24,6 +24,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#define ENCRYPTED_SYMMETRIC_KEY_LEN 256
+#define RSA_PUB_KEY_BYTES 451
+
 typedef struct {
 	RSA *public_key;
 	RSA *private_key;

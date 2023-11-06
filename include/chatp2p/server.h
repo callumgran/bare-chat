@@ -19,11 +19,10 @@
 #define SERVER_H
 
 #include <chatp2p/address_book.h>
+#include <chatp2p/chat_msg.h>
 #include <encrypt/encrypt.h>
 #include <lib/logger.h>
 #include <lib/threadpool.h>
-
-#define SERVER_BUF_LEN 65536
 
 typedef struct {
 	int socket;
@@ -31,6 +30,7 @@ typedef struct {
 	AddrBook *addr_book;
 	Threadpool *threadpool;
 	KeyPair key_pair;
+	uint32_t server_header_key;
 } ChatServer;
 
 typedef struct {
@@ -38,9 +38,10 @@ typedef struct {
 	int socket;
 	bool *running;
 	AddrBook *addr_book;
-	char buffer[SERVER_BUF_LEN];
+	char buffer[CHAT_MESSAGE_MAX_LEN];
 	struct sockaddr_in client_addr;
 	KeyPair *key_pair;
+	uint32_t server_header_key;
 } ServerThreadData;
 
 int server_init(ChatServer *server, char *env_file);

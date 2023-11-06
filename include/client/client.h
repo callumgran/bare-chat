@@ -23,8 +23,6 @@
 #include <encrypt/encrypt.h>
 #include <lib/threadpool.h>
 
-#define CLIENT_BUF_LEN 65536
-
 #define CLIENT_PING_INTERVAL 30 // Iterations
 #define CLIENT_JOIN_TIMEOUT 5 // Seconds
 
@@ -65,6 +63,7 @@ typedef struct {
 	struct sockaddr_in server_addr;
 	SymmetricKey server_key;
 	KeyPair key_pair;
+	uint32_t server_header_key;
 } ChatClient;
 
 typedef struct {
@@ -73,12 +72,13 @@ typedef struct {
 	bool *running;
 	bool *connected;
 	AddrBook *addr_book;
-	char buffer[CLIENT_BUF_LEN];
+	char buffer[CHAT_MESSAGE_MAX_LEN];
 	struct sockaddr_in ext_addr;
 	struct sockaddr_in server_addr;
 	char *name;
 	SymmetricKey *server_key;
 	KeyPair *key_pair;
+	uint32_t server_header_key;
 } ClientThreadData;
 
 typedef struct {
