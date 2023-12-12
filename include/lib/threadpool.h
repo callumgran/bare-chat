@@ -27,22 +27,22 @@
 typedef void worker_thread_func(void *arg);
 
 typedef struct {
-	worker_thread_func *func;
-	void *arg;
-	int sleep_time;
+    worker_thread_func *func;
+    void *arg;
+    int sleep_time;
 } ThreadPoolTask;
 
 typedef struct {
-	bool cond_predicate;
-	pthread_mutex_t cond_lock;
-	pthread_cond_t cond_variable;
+    bool cond_predicate;
+    pthread_mutex_t cond_lock;
+    pthread_cond_t cond_variable;
 } Condition;
 
 typedef struct {
-	int max_threads;
-	Queue *task_queue;
-	Condition *cond_var;
-	pthread_t *threads;
+    int max_threads;
+    Queue *task_queue;
+    Condition *cond_var;
+    pthread_t *threads;
 } Threadpool;
 
 void threadpool_init(Threadpool *threadpool, int max_threads, int queue_size);
@@ -54,7 +54,7 @@ void threadpool_start(Threadpool *threadpool);
 bool submit_worker_task(Threadpool *threadpool, worker_thread_func func, void *arg);
 
 bool submit_worker_task_timeout(Threadpool *threadpool, worker_thread_func func, void *arg,
-								int timeout);
+                                int timeout);
 
 void threadpool_stop(Threadpool *threadpool);
 

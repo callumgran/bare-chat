@@ -21,28 +21,19 @@
 #include <stdio.h>
 
 #define LOG_INFO(...)                         \
-	({                                        \
-		fprintf(stdout, "\033[0;33m[LOG]: "); \
-		fprintf(stdout, __VA_ARGS__);         \
-		fprintf(stdout, "\033[0m\n");         \
-		fflush(stdout);                       \
-	})
+    ({                                        \
+        fprintf(stdout, "\033[0;33m[LOG]: "); \
+        fprintf(stdout, __VA_ARGS__);         \
+        fprintf(stdout, "\033[0m\n");         \
+        fflush(stdout);                       \
+    })
 
 #define LOG_ERR(...)                          \
-	({                                        \
-		fprintf(stderr, "\033[0;31m[ERR]: "); \
-		fprintf(stderr, __VA_ARGS__);         \
-		fprintf(stderr, "\033[0m\n");         \
-		fflush(stderr);                       \
-	})
-
-#define LOG_MSG(...)                          \
-	({                                        \
-		fprintf(stdout, "\033[0;32m[MSG]: "); \
-		fprintf(stdout, __VA_ARGS__);         \
-		fprintf(stdout, "\033[0m\n");         \
-		fflush(stdout);                       \
-	})
-
+    ({                                        \
+        fprintf(stderr, "\033[0;31m[ERR]: "); \
+        fprintf(stderr, __VA_ARGS__);         \
+        fprintf(stderr, "\033[0m\n");         \
+        fflush(stderr);                       \
+    })
 
 #endif

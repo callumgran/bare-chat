@@ -15,39 +15,58 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef CLIENT_H
+#define CLIENT_H
 
 #include <chatp2p/address_book.h>
 #include <chatp2p/chat_msg.h>
 #include <encrypt/encrypt.h>
-#include <lib/logger.h>
 #include <lib/threadpool.h>
+
+#define CLIENT_PING_INTERVAL 30 // Iterations
+#define CLIENT_JOIN_TIMEOUT 5 // Seconds
 
 typedef struct {
     int socket;
+    bool connected;
     bool running;
     AddrBook *addr_book;
     Threadpool *threadpool;
+    char name[256];
+    struct sockaddr_in server_addr;
+    SymmetricKey server_key;
     KeyPair key_pair;
     uint32_t server_header_key;
-} ChatServer;
+} ChatClient;
 
 typedef struct {
     size_t len;
     int socket;
     bool *running;
+    bool *connected;
     AddrBook *addr_book;
     char buffer[CHAT_MESSAGE_MAX_LEN];
-    struct sockaddr_in client_addr;
+    struct sockaddr_in ext_addr;
+    struct sockaddr_in server_addr;
+    char *name;
+    SymmetricKey *server_key;
     KeyPair *key_pair;
     uint32_t server_header_key;
-} ServerThreadData;
+} ClientThreadData;
 
-int server_init(ChatServer *server, char *env_file);
+typedef struct {
+    int socket;
+    ChatMessage *msg;
+} PingData;
 
-int server_run(ChatServer *server);
+typedef bool MessageRecvExtraHandler(void *data);
 
-void server_free(ChatServer *server);
+extern MessageRecvExtraHandler *extra_message_handlers[CHAT_MESSAGE_TYPE_COUNT];
 
-#endif // SERVER_H
+int client_init(ChatClient *client, char *env_file);
+
+int client_run(ChatClient *client, worker_thread_func *user_command_loop_func);
+
+void client_free(ChatClient *client);
+
+#endif // CLIENT_H

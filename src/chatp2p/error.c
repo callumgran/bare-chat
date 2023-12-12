@@ -15,24 +15,14 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <client/client.h>
-#include <lib/logger.h>
+#include <chatp2p/error.h>
+#include <stdlib.h>
 
-int main(void)
+MessageErrorHandler *message_error_handlers[CHAT_ERROR_COUNT] = { NULL, NULL, NULL, NULL,
+                                                                  NULL, NULL, NULL, NULL };
+
+void chat_handle_message_error(ChatErrorType type, void *data)
 {
-	ChatClient client;
-	if (client_init(&client, ".env") == -1) {
-		LOG_ERR("Failed to initialize server, exiting...");
-		return -1;
-	}
-
-	if (client_run(&client) == -1) {
-		LOG_ERR("Failed to run server, exiting...");
-		client_free(&client);
-		return -1;
-	}
-
-	client_free(&client);
-
-	return 0;
+    if (type < CHAT_ERROR_COUNT && message_error_handlers[type] != NULL)
+        message_error_handlers[type](data);
 }

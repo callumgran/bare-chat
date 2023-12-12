@@ -23,96 +23,96 @@
 
 bool queue_init(Queue *queue, size_t capacity, size_t t_size)
 {
-	if (queue == NULL)
-		return false;
+    if (queue == NULL)
+        return false;
 
-	if (capacity == 0 || t_size == 0)
-		return false;
+    if (capacity == 0 || t_size == 0)
+        return false;
 
-	queue->start = 0;
-	queue->end = 0;
-	queue->size = 0;
-	queue->capacity = capacity;
-	queue->t_size = t_size;
-	queue->items = malloc(queue->capacity * queue->t_size);
+    queue->start = 0;
+    queue->end = 0;
+    queue->size = 0;
+    queue->capacity = capacity;
+    queue->t_size = t_size;
+    queue->items = malloc(queue->capacity * queue->t_size);
 
-	if (queue->items == NULL)
-		return false;
+    if (queue->items == NULL)
+        return false;
 
-	return true;
+    return true;
 }
 
 bool queue_free(Queue *queue)
 {
-	if (queue == NULL || queue->items == NULL)
-		return false;
+    if (queue == NULL || queue->items == NULL)
+        return false;
 
-	free(queue->items);
+    free(queue->items);
 
-	return true;
+    return true;
 }
 
 bool queue_empty(const Queue *queue)
 {
-	if (queue == NULL)
-		return false;
+    if (queue == NULL)
+        return false;
 
-	return !queue->size;
+    return !queue->size;
 }
 
 bool queue_full(const Queue *queue)
 {
-	if (queue == NULL)
-		return false;
+    if (queue == NULL)
+        return false;
 
-	return queue->size == queue->capacity;
+    return queue->size == queue->capacity;
 }
 
 bool queue_push(Queue *queue, void *item)
 {
-	if (queue == NULL || item == NULL || queue->items == NULL)
-		return false;
+    if (queue == NULL || item == NULL || queue->items == NULL)
+        return false;
 
-	if (queue_full(queue))
-		return false;
+    if (queue_full(queue))
+        return false;
 
-	memcpy(queue->items + queue->end * queue->t_size, item, queue->t_size);
-	queue->end = (queue->end + 1) % queue->capacity;
-	++queue->size;
-	return true;
+    memcpy(queue->items + queue->end * queue->t_size, item, queue->t_size);
+    queue->end = (queue->end + 1) % queue->capacity;
+    ++queue->size;
+    return true;
 }
 
 bool queue_pop(Queue *queue, void *dest)
 {
-	if (queue == NULL || queue->items == NULL || dest == NULL)
-		return false;
+    if (queue == NULL || queue->items == NULL || dest == NULL)
+        return false;
 
-	if (queue_empty(queue))
-		return false;
+    if (queue_empty(queue))
+        return false;
 
-	void *ret = memcpy(dest, queue->items + queue->start * queue->t_size, queue->t_size);
+    void *ret = memcpy(dest, queue->items + queue->start * queue->t_size, queue->t_size);
 
-	if (ret == NULL)
-		return false;
+    if (ret == NULL)
+        return false;
 
-	queue->start = (queue->start + 1) % queue->capacity;
-	--queue->size;
+    queue->start = (queue->start + 1) % queue->capacity;
+    --queue->size;
 
-	return true;
+    return true;
 }
 
 bool queue_get(const Queue *queue, void *dest)
 {
-	if (queue == NULL || queue->items == NULL || dest == NULL)
-		return false;
+    if (queue == NULL || queue->items == NULL || dest == NULL)
+        return false;
 
-	if (queue_empty(queue))
-		return false;
+    if (queue_empty(queue))
+        return false;
 
-	void *ret = memcpy(dest, queue->items + queue->start * queue->t_size, queue->t_size);
+    void *ret = memcpy(dest, queue->items + queue->start * queue->t_size, queue->t_size);
 
-	if (ret == NULL)
-		return false;
+    if (ret == NULL)
+        return false;
 
-	return true;
+    return true;
 }

@@ -29,22 +29,22 @@
 #define NAME_MAX_LEN 256 // Maximum length of a client name
 
 typedef struct address_book_entry_t {
-	struct sockaddr_in addr;
-	char name[NAME_MAX_LEN];
-	struct timespec last_seen;
-	struct address_book_entry_t *prev;
-	struct address_book_entry_t *next;
-	SymmetricKey key;
+    struct sockaddr_in addr;
+    char name[NAME_MAX_LEN];
+    struct timespec last_seen;
+    struct address_book_entry_t *prev;
+    struct address_book_entry_t *next;
+    SymmetricKey key;
 } AddrEntry;
 
 typedef struct address_book_t {
-	AddrEntry *head;
-	AddrEntry *tail;
-	size_t size;
+    AddrEntry *head;
+    AddrEntry *tail;
+    size_t size;
 } AddrBook;
 
 typedef struct {
-	AddrEntry *curr;
+    AddrEntry *curr;
 } AddrBookIter;
 
 int addr_to_string(char *buffer, const struct sockaddr_in *addr);

@@ -25,58 +25,58 @@
 
 #define CHAT_MESSAGE_MAX_LEN UINT16_MAX + 1 // Maximum length of a chat message
 #define CHAT_CONNECT_MESSAGE_SIZE \
-	451 + NAME_MAX_LEN + IP_PORT_MAX_LEN + 3 // Size of a connect message
+    451 + NAME_MAX_LEN + IP_PORT_MAX_LEN + 3 // Size of a connect message
 
 typedef enum {
-	CHAT_MESSAGE_TYPE_TEXT = 0, // Used for sending text messages to other clients
-	CHAT_MESSAGE_TYPE_JOIN, // Used for when a client joins the server
-	CHAT_MESSAGE_TYPE_JOIN_RESPONSE, // Used for when a client joins in response to a join message
-	CHAT_MESSAGE_TYPE_NAME, // Used for when a client changes their name
-	CHAT_MESSAGE_TYPE_LEAVE, // Used for when a client leaves the server
-	CHAT_MESSAGE_TYPE_CONNECT, // Used for when a client connects to a peer
-	CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, // Used for when a client connects in response to a connect
-										// message
-	CHAT_MESSAGE_TYPE_DISCONNECT, // Used for when a client disconnects from a peer
-	CHAT_MESSAGE_TYPE_ERROR, // Used for sending errors to the client
-	CHAT_MESSAGE_TYPE_INFO, // Used for sending info about the server
-	CHAT_MESSAGE_TYPE_PING, // Used for pinging the server
-	CHAT_MESSAGE_TYPE_PONG, // Used for responding to pings
-	CHAT_MESSAGE_TYPE_COUNT // Used for counting the number of message types
+    CHAT_MESSAGE_TYPE_TEXT = 0, // Used for sending text messages to other clients
+    CHAT_MESSAGE_TYPE_JOIN, // Used for when a client joins the server
+    CHAT_MESSAGE_TYPE_JOIN_RESPONSE, // Used for when a client joins in response to a join message
+    CHAT_MESSAGE_TYPE_NAME, // Used for when a client changes their name
+    CHAT_MESSAGE_TYPE_LEAVE, // Used for when a client leaves the server
+    CHAT_MESSAGE_TYPE_CONNECT, // Used for when a client connects to a peer
+    CHAT_MESSAGE_TYPE_CONNECT_RESPONSE, // Used for when a client connects in response to a connect
+                                        // message
+    CHAT_MESSAGE_TYPE_DISCONNECT, // Used for when a client disconnects from a peer
+    CHAT_MESSAGE_TYPE_ERROR, // Used for sending errors to the client
+    CHAT_MESSAGE_TYPE_INFO, // Used for sending info about the server
+    CHAT_MESSAGE_TYPE_PING, // Used for pinging the server
+    CHAT_MESSAGE_TYPE_PONG, // Used for responding to pings
+    CHAT_MESSAGE_TYPE_COUNT // Used for counting the number of message types
 } ChatMessageType;
 
 /*
-	Chat message packet is a udp package with the following header format:
+    Chat message packet is a udp package with the following header format:
 
-	Chat message type (2 bytes)
-	Message length (2 bytes)
-	Server key (4 bytes)
-	Body (x * 1 byte)
+    Chat message type (2 bytes)
+    Message length (2 bytes)
+    Server key (4 bytes)
+    Body (x * 1 byte)
 
-	 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 |         Chat Message Type     |         Message Length        |
-	 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 |                          Server Key                           |
-	 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 |                                                               |
-	 |                         Message Body                          |
-	 |                                                               |
-	 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |         Chat Message Type     |         Message Length        |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                          Server Key                           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                                                               |
+     |                         Message Body                          |
+     |                                                               |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 struct chat_msg_header_t {
-	uint16_t type;
-	uint16_t len;
-	uint32_t server_key;
+    uint16_t type;
+    uint16_t len;
+    uint32_t server_key;
 } __attribute__((packed));
 
 typedef struct chat_msg_t {
-	struct chat_msg_header_t header;
-	char *body;
+    struct chat_msg_header_t header;
+    char *body;
 } ChatMessage;
 
 extern char *CHAT_MESSAGE_TYPE_STRINGS[CHAT_MESSAGE_TYPE_COUNT];
 
 void chat_msg_init(ChatMessage *msg, ChatMessageType type, uint16_t len, uint32_t server_key,
-				   char *body);
+                   char *body);
 
 ssize_t chat_msg_from_string(ChatMessage *msg, const char *buffer, size_t len);
 
@@ -89,9 +89,9 @@ void chat_msg_free(ChatMessage *msg);
 void chat_msg_send(ChatMessage *msg, int socket, const struct sockaddr_in *client_addr);
 
 void chat_msg_send_text(char *text, int socket, const struct sockaddr_in *client_addr,
-						int server_header_key);
+                        int server_header_key);
 
 void chat_msg_send_text_enc(char *text, int socket, const struct sockaddr_in *addr,
-							SymmetricKey *key, int server_header_key);
+                            SymmetricKey *key, int server_header_key);
 
 #endif // CHAT_MESSAGE_H

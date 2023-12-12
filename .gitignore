@@ -8,8 +8,10 @@ tags
 compile_commands.json
 
 # compiled binary, but not sources
+!./src/client/*
+!client/*
 server
-client
+/client
 .env
 server-fuzz
 

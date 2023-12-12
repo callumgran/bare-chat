@@ -28,13 +28,13 @@
 #define RSA_PUB_KEY_BYTES 451
 
 typedef struct {
-	RSA *public_key;
-	RSA *private_key;
+    RSA *public_key;
+    RSA *private_key;
 } KeyPair;
 
 typedef struct {
-	unsigned char key[32];
-	unsigned char init_vect[16];
+    unsigned char key[32];
+    unsigned char init_vect[16];
 } SymmetricKey;
 
 bool key_pair_init(KeyPair *key_pair, const char *public_key_path, const char *private_key_path);

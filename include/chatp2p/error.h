@@ -15,23 +15,27 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef ENV_PARSER_H
-#define ENV_PARSER_H
+#ifndef CHAT_ERROR_H
+#define CHAT_ERROR_H
 
-typedef struct {
-    char *key;
-    char *value;
-} EnvVar;
+typedef enum {
+    CHAT_BAD_ADDRESS,
+    CHAT_NO_ENTRY,
+    CHAT_DECRYPT_ERROR,
+    CHAT_INVALID_CONNECT_MSG,
+    CHAT_ALREADY_CONNECTED,
+    CHAT_ADDR_BOOK_ERROR,
+    CHAT_CONNECTION_DENIED,
+    CHAT_BAD_PING,
+    CHAT_INVALID_SERVER_KEY,
+    CHAT_INVALID_MESSAGE_TYPE,
+    CHAT_ERROR_COUNT
+} ChatErrorType;
 
-typedef struct {
-    EnvVar *vars;
-    int num_vars;
-} EnvVars;
+typedef void MessageErrorHandler(void *data);
 
-EnvVars *env_parse(const char *env);
+extern MessageErrorHandler *message_error_handlers[CHAT_ERROR_COUNT];
 
-char *env_get_val(EnvVars *env_vars, const char *key);
+void chat_handle_message_error(ChatErrorType type, void *data);
 
-void env_vars_free(EnvVars *env_vars);
-
-#endif // ENV_PARSER_H
+#endif // CHAT_ERROR_H

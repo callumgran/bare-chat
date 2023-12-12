@@ -25,316 +25,316 @@
 
 bool addr_eq(const struct sockaddr_in *addr1, const struct sockaddr_in *addr2)
 {
-	if (addr1 == NULL || addr2 == NULL)
-		return false;
+    if (addr1 == NULL || addr2 == NULL)
+        return false;
 
-	return addr1->sin_family == addr2->sin_family && addr1->sin_port == addr2->sin_port &&
-		   addr1->sin_addr.s_addr == addr2->sin_addr.s_addr;
+    return addr1->sin_family == addr2->sin_family && addr1->sin_port == addr2->sin_port &&
+           addr1->sin_addr.s_addr == addr2->sin_addr.s_addr;
 }
 
 int addr_to_string(char *buffer, const struct sockaddr_in *addr)
 {
-	if (buffer == NULL || addr == NULL)
-		return -1;
+    if (buffer == NULL || addr == NULL)
+        return -1;
 
-	char ip[INET_ADDRSTRLEN];
-	if (inet_ntop(AF_INET, &addr->sin_addr, ip, INET_ADDRSTRLEN) == NULL)
-		return -1;
+    char ip[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, &addr->sin_addr, ip, INET_ADDRSTRLEN) == NULL)
+        return -1;
 
-	return sprintf(buffer, "%s:%d", ip, ntohs(addr->sin_port));
+    return sprintf(buffer, "%s:%d", ip, ntohs(addr->sin_port));
 }
 
 int addr_from_string(struct sockaddr_in *addr, const char *buffer)
 {
-	if (addr == NULL || buffer == NULL)
-		return -1;
+    if (addr == NULL || buffer == NULL)
+        return -1;
 
-	char ip[INET_ADDRSTRLEN];
-	uint16_t port;
+    char ip[INET_ADDRSTRLEN];
+    uint16_t port;
 
-	if (sscanf(buffer, "%[^:]:%hu", ip, &port) != 2)
-		return -1;
+    if (sscanf(buffer, "%[^:]:%hu", ip, &port) != 2)
+        return -1;
 
-	if (inet_pton(AF_INET, ip, &addr->sin_addr) != 1)
-		return -1;
+    if (inet_pton(AF_INET, ip, &addr->sin_addr) != 1)
+        return -1;
 
-	addr->sin_port = htons(port);
-	addr->sin_family = AF_INET;
+    addr->sin_port = htons(port);
+    addr->sin_family = AF_INET;
 
-	return 0;
+    return 0;
 }
 
 int addr_from_ip_port(struct sockaddr_in *addr, const char *ip, uint16_t port)
 {
-	if (addr == NULL || ip == NULL)
-		return -1;
+    if (addr == NULL || ip == NULL)
+        return -1;
 
-	if (inet_pton(AF_INET, ip, &addr->sin_addr) != 1)
-		return -1;
+    if (inet_pton(AF_INET, ip, &addr->sin_addr) != 1)
+        return -1;
 
-	addr->sin_port = htons(port);
-	addr->sin_family = AF_INET;
+    addr->sin_port = htons(port);
+    addr->sin_family = AF_INET;
 
-	return 0;
+    return 0;
 }
 
 bool addr_book_init(AddrBook *addr_book)
 {
-	if (addr_book == NULL)
-		return false;
+    if (addr_book == NULL)
+        return false;
 
-	addr_book->head = NULL;
-	addr_book->tail = NULL;
-	addr_book->size = 0;
+    addr_book->head = NULL;
+    addr_book->tail = NULL;
+    addr_book->size = 0;
 
-	return true;
+    return true;
 }
 
 bool addr_book_free(AddrBook *addr_book)
 {
-	if (addr_book == NULL)
-		return false;
+    if (addr_book == NULL)
+        return false;
 
-	AddrEntry *node = addr_book->head;
-	AddrEntry *next;
+    AddrEntry *node = addr_book->head;
+    AddrEntry *next;
 
-	while (node != NULL) {
-		next = node->next;
-		free(node);
-		node = next;
-	}
+    while (node != NULL) {
+        next = node->next;
+        free(node);
+        node = next;
+    }
 
-	return true;
+    return true;
 }
 
 bool addr_book_empty(const AddrBook *addr_book)
 {
-	if (addr_book == NULL)
-		return false;
+    if (addr_book == NULL)
+        return false;
 
-	return !addr_book->size;
+    return !addr_book->size;
 }
 
 bool addr_update_time(AddrBook *addr_book, const struct sockaddr_in *addr)
 {
-	if (addr_book == NULL || addr == NULL)
-		return false;
+    if (addr_book == NULL || addr == NULL)
+        return false;
 
-	AddrEntry *node = addr_book->head;
+    AddrEntry *node = addr_book->head;
 
-	while (node != NULL) {
-		if (addr_eq(&node->addr, addr)) {
-			clock_gettime(CLOCK_MONOTONIC_RAW, &node->last_seen);
-			return true;
-		}
+    while (node != NULL) {
+        if (addr_eq(&node->addr, addr)) {
+            clock_gettime(CLOCK_MONOTONIC_RAW, &node->last_seen);
+            return true;
+        }
 
-		node = node->next;
-	}
+        node = node->next;
+    }
 
-	return false;
+    return false;
 }
 
 bool addr_book_push_back(AddrBook *addr_book, struct sockaddr_in *addr)
 {
-	if (addr_book == NULL || addr == NULL)
-		return false;
+    if (addr_book == NULL || addr == NULL)
+        return false;
 
-	AddrEntry *node = malloc(sizeof(AddrEntry));
+    AddrEntry *node = malloc(sizeof(AddrEntry));
 
-	if (node == NULL)
-		return false;
+    if (node == NULL)
+        return false;
 
-	memcpy(&node->addr, addr, sizeof(struct sockaddr_in));
-	strncpy(node->name, "loading", 255);
-	symmetric_key_init(&node->key);
-	clock_gettime(CLOCK_MONOTONIC_RAW, &node->last_seen);
-	node->prev = addr_book->tail;
-	node->next = NULL;
+    memcpy(&node->addr, addr, sizeof(struct sockaddr_in));
+    strncpy(node->name, "loading", 255);
+    symmetric_key_init(&node->key);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &node->last_seen);
+    node->prev = addr_book->tail;
+    node->next = NULL;
 
-	if (addr_book->tail != NULL)
-		addr_book->tail->next = node;
+    if (addr_book->tail != NULL)
+        addr_book->tail->next = node;
 
-	addr_book->tail = node;
+    addr_book->tail = node;
 
-	if (addr_book->head == NULL)
-		addr_book->head = node;
+    if (addr_book->head == NULL)
+        addr_book->head = node;
 
-	addr_book->size++;
+    addr_book->size++;
 
-	return true;
+    return true;
 }
 
 bool addr_book_remove(AddrBook *addr_book, const struct sockaddr_in *addr)
 {
-	if (addr_book == NULL || addr == NULL)
-		return NULL;
+    if (addr_book == NULL || addr == NULL)
+        return NULL;
 
-	AddrEntry *node = addr_book->head;
+    AddrEntry *node = addr_book->head;
 
-	while (node != NULL) {
-		if (addr_eq(&node->addr, addr)) {
-			if (node->prev != NULL)
-				node->prev->next = node->next;
+    while (node != NULL) {
+        if (addr_eq(&node->addr, addr)) {
+            if (node->prev != NULL)
+                node->prev->next = node->next;
 
-			if (node->next != NULL)
-				node->next->prev = node->prev;
+            if (node->next != NULL)
+                node->next->prev = node->prev;
 
-			if (addr_book->head == node)
-				addr_book->head = node->next;
+            if (addr_book->head == node)
+                addr_book->head = node->next;
 
-			if (addr_book->tail == node)
-				addr_book->tail = node->prev;
+            if (addr_book->tail == node)
+                addr_book->tail = node->prev;
 
-			node->prev = NULL;
-			node->next = NULL;
-			free(node);
+            node->prev = NULL;
+            node->next = NULL;
+            free(node);
 
-			addr_book->size--;
+            addr_book->size--;
 
-			return true;
-		}
+            return true;
+        }
 
-		node = node->next;
-	}
+        node = node->next;
+    }
 
-	return false;
+    return false;
 }
 
 
 bool addr_book_contains(const AddrBook *addr_book, const struct sockaddr_in *addr)
 {
-	if (addr_book == NULL || addr == NULL)
-		return false;
+    if (addr_book == NULL || addr == NULL)
+        return false;
 
-	AddrEntry *node = addr_book->head;
+    AddrEntry *node = addr_book->head;
 
-	while (node != NULL) {
-		if (addr_eq(&node->addr, addr))
-			return true;
+    while (node != NULL) {
+        if (addr_eq(&node->addr, addr))
+            return true;
 
-		node = node->next;
-	}
+        node = node->next;
+    }
 
-	return false;
+    return false;
 }
 
 AddrEntry *addr_book_find(const AddrBook *addr_book, const struct sockaddr_in *addr)
 {
-	if (addr_book == NULL || addr == NULL)
-		return NULL;
+    if (addr_book == NULL || addr == NULL)
+        return NULL;
 
-	AddrEntry *node = addr_book->head;
+    AddrEntry *node = addr_book->head;
 
-	while (node != NULL) {
-		if (addr_eq(&node->addr, addr))
-			return node;
+    while (node != NULL) {
+        if (addr_eq(&node->addr, addr))
+            return node;
 
-		node = node->next;
-	}
+        node = node->next;
+    }
 
-	return NULL;
+    return NULL;
 }
 
 AddrEntry *addr_book_find_by_name(const AddrBook *addr_book, const char *name)
 {
-	if (addr_book == NULL || name == NULL)
-		return NULL;
+    if (addr_book == NULL || name == NULL)
+        return NULL;
 
-	AddrEntry *node = addr_book->head;
+    AddrEntry *node = addr_book->head;
 
-	while (node != NULL) {
-		if (strcmp(node->name, name) == 0)
-			return node;
+    while (node != NULL) {
+        if (strcmp(node->name, name) == 0)
+            return node;
 
-		node = node->next;
-	}
+        node = node->next;
+    }
 
-	return NULL;
+    return NULL;
 }
 
 bool addr_book_to_string(char *buffer, AddrBook *addr_book, const struct sockaddr_in *client_addr)
 {
-	if (buffer == NULL || addr_book == NULL)
-		return false;
+    if (buffer == NULL || addr_book == NULL)
+        return false;
 
-	AddrEntry *node = addr_book->head;
-	int offset = 0;
+    AddrEntry *node = addr_book->head;
+    int offset = 0;
 
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 
-	offset += sprintf(buffer + offset, "Address Book:\n");
-	while (node != NULL) {
-		// Remove nodes that haven't been seen in 5 minutes from the address book
-		if (now.tv_sec - node->last_seen.tv_sec > 300) {
-			if (node->prev != NULL)
-				node->prev->next = node->next;
+    offset += sprintf(buffer + offset, "Address Book:\n");
+    while (node != NULL) {
+        // Remove nodes that haven't been seen in 5 minutes from the address book
+        if (now.tv_sec - node->last_seen.tv_sec > 300) {
+            if (node->prev != NULL)
+                node->prev->next = node->next;
 
-			if (node->next != NULL)
-				node->next->prev = node->prev;
+            if (node->next != NULL)
+                node->next->prev = node->prev;
 
-			if (addr_book->head == node)
-				addr_book->head = node->next;
+            if (addr_book->head == node)
+                addr_book->head = node->next;
 
-			if (addr_book->tail == node)
-				addr_book->tail = node->prev;
+            if (addr_book->tail == node)
+                addr_book->tail = node->prev;
 
-			AddrEntry *tmp = node;
+            AddrEntry *tmp = node;
 
-			node = node->next;
+            node = node->next;
 
-			addr_book->size--;
+            addr_book->size--;
 
-			free(tmp);
-		}
+            free(tmp);
+        }
 
-		if (client_addr != NULL) {
-			if (addr_eq(&node->addr, client_addr)) {
-				node = node->next;
-				continue;
-			}
-		}
+        if (client_addr != NULL) {
+            if (addr_eq(&node->addr, client_addr)) {
+                node = node->next;
+                continue;
+            }
+        }
 
-		char addr_str[IP_PORT_MAX_LEN];
-		addr_to_string(addr_str, &node->addr);
+        char addr_str[IP_PORT_MAX_LEN];
+        addr_to_string(addr_str, &node->addr);
 
-		offset += sprintf(buffer + offset, "%s: %s\n", node->name, addr_str);
+        offset += sprintf(buffer + offset, "%s: %s\n", node->name, addr_str);
 
-		node = node->next;
-	}
+        node = node->next;
+    }
 
-	return true;
+    return true;
 }
 
 static void addr_book_start(AddrBookIter *iter, AddrBook *list)
 {
-	iter->curr = list->head;
+    iter->curr = list->head;
 }
 
 static void addr_book_next(AddrBookIter *iter)
 {
-	iter->curr = iter->curr->next;
+    iter->curr = iter->curr->next;
 }
 
 static bool addr_book_has_next(AddrBookIter *iter)
 {
-	return iter->curr->next != NULL;
+    return iter->curr->next != NULL;
 }
 
 void *addr_book_get(AddrBookIter *iter)
 {
-	return iter->curr;
+    return iter->curr;
 }
 
 void addr_book_foreach(AddrBook *dll, void (*exec)(void *, void *), void *args)
 {
-	AddrBookIter iter;
-	addr_book_start(&iter, dll);
+    AddrBookIter iter;
+    addr_book_start(&iter, dll);
 
-	while (true) {
-		exec(addr_book_get(&iter), args);
-		if (addr_book_get(&iter) || !addr_book_has_next(&iter))
-			break;
-		addr_book_next(&iter);
-	}
+    while (true) {
+        exec(addr_book_get(&iter), args);
+        if (addr_book_get(&iter) || !addr_book_has_next(&iter))
+            break;
+        addr_book_next(&iter);
+    }
 }

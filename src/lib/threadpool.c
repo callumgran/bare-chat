@@ -27,104 +27,104 @@
 
 void threadpool_init(Threadpool *threadpool, int max_threads, int queue_size)
 {
-	Queue *queue = (Queue *)(malloc(sizeof(Queue)));
-	if (!queue_init(queue, queue_size, sizeof(ThreadPoolTask))) {
-		free(queue);
-		LOG_ERR("Failed to initialize threadpool queue");
-		return;
-	}
+    Queue *queue = (Queue *)(malloc(sizeof(Queue)));
+    if (!queue_init(queue, queue_size, sizeof(ThreadPoolTask))) {
+        free(queue);
+        LOG_ERR("Failed to initialize threadpool queue");
+        return;
+    }
 
-	threadpool->task_queue = queue;
+    threadpool->task_queue = queue;
 
-	threadpool->max_threads = max_threads;
-	threadpool->threads = (pthread_t *)(malloc(max_threads * sizeof(pthread_t)));
+    threadpool->max_threads = max_threads;
+    threadpool->threads = (pthread_t *)(malloc(max_threads * sizeof(pthread_t)));
 
-	threadpool->cond_var = (Condition *)(malloc(sizeof(Condition)));
-	threadpool->cond_var->cond_predicate = true;
-	pthread_mutex_init(&threadpool->cond_var->cond_lock, NULL);
-	pthread_cond_init(&threadpool->cond_var->cond_variable, NULL);
+    threadpool->cond_var = (Condition *)(malloc(sizeof(Condition)));
+    threadpool->cond_var->cond_predicate = true;
+    pthread_mutex_init(&threadpool->cond_var->cond_lock, NULL);
+    pthread_cond_init(&threadpool->cond_var->cond_variable, NULL);
 }
 
 void threadpool_stop(Threadpool *workers)
 {
-	pthread_mutex_lock(&workers->cond_var->cond_lock);
-	workers->cond_var->cond_predicate = false;
-	pthread_cond_broadcast(&workers->cond_var->cond_variable);
-	pthread_mutex_unlock(&workers->cond_var->cond_lock);
-	for (int i = 0; i < workers->max_threads; i++)
-		pthread_join(*(workers->threads + i), NULL);
+    pthread_mutex_lock(&workers->cond_var->cond_lock);
+    workers->cond_var->cond_predicate = false;
+    pthread_cond_broadcast(&workers->cond_var->cond_variable);
+    pthread_mutex_unlock(&workers->cond_var->cond_lock);
+    for (int i = 0; i < workers->max_threads; i++)
+        pthread_join(*(workers->threads + i), NULL);
 }
 
 void threadpool_free(Threadpool *workers)
 {
-	queue_free(workers->task_queue);
-	free(workers->task_queue);
+    queue_free(workers->task_queue);
+    free(workers->task_queue);
 
-	free(workers->threads);
+    free(workers->threads);
 
-	pthread_mutex_destroy(&workers->cond_var->cond_lock);
-	pthread_cond_destroy(&workers->cond_var->cond_variable);
+    pthread_mutex_destroy(&workers->cond_var->cond_lock);
+    pthread_cond_destroy(&workers->cond_var->cond_variable);
 
-	free(workers->cond_var);
+    free(workers->cond_var);
 }
 
 static void *start_worker_thread(void *arg)
 {
-	Threadpool *data = (Threadpool *)arg;
-	while (true) {
-		ThreadPoolTask item = (ThreadPoolTask){ 0 };
-		pthread_mutex_lock(&data->cond_var->cond_lock);
-		while (queue_empty(data->task_queue) && data->cond_var->cond_predicate)
-			pthread_cond_wait(&data->cond_var->cond_variable, &data->cond_var->cond_lock);
-		bool ret = queue_pop(data->task_queue, &item);
-		pthread_cond_signal(&data->cond_var->cond_variable);
-		pthread_mutex_unlock(&data->cond_var->cond_lock);
+    Threadpool *data = (Threadpool *)arg;
+    while (true) {
+        ThreadPoolTask item = (ThreadPoolTask){ 0 };
+        pthread_mutex_lock(&data->cond_var->cond_lock);
+        while (queue_empty(data->task_queue) && data->cond_var->cond_predicate)
+            pthread_cond_wait(&data->cond_var->cond_variable, &data->cond_var->cond_lock);
+        bool ret = queue_pop(data->task_queue, &item);
+        pthread_cond_signal(&data->cond_var->cond_variable);
+        pthread_mutex_unlock(&data->cond_var->cond_lock);
 
-		if (ret && data->cond_var->cond_predicate) {
-			struct timeval tv;
-			tv.tv_sec = item.sleep_time;
-			select(0, NULL, NULL, NULL, &tv);
-			item.func(item.arg);
-		} else {
-			pthread_exit(NULL);
-		}
-	}
+        if (ret && data->cond_var->cond_predicate) {
+            struct timeval tv;
+            tv.tv_sec = item.sleep_time;
+            select(0, NULL, NULL, NULL, &tv);
+            item.func(item.arg);
+        } else {
+            pthread_exit(NULL);
+        }
+    }
 }
 
 void threadpool_start(Threadpool *workers)
 {
-	for (int i = 0; i < workers->max_threads; i++)
-		pthread_create(workers->threads + i, NULL, start_worker_thread, workers);
+    for (int i = 0; i < workers->max_threads; i++)
+        pthread_create(workers->threads + i, NULL, start_worker_thread, workers);
 }
 
 static bool submit_task(Threadpool *workers, ThreadPoolTask *task)
 {
-	pthread_mutex_lock(&workers->cond_var->cond_lock);
-	bool ret = queue_push(workers->task_queue, (void *)task);
-	while (!ret) {
-		pthread_cond_wait(&workers->cond_var->cond_variable, &workers->cond_var->cond_lock);
-		ret = queue_push(workers->task_queue, (void *)task);
-	}
-	pthread_mutex_unlock(&workers->cond_var->cond_lock);
-	pthread_cond_signal(&workers->cond_var->cond_variable);
-	return ret;
+    pthread_mutex_lock(&workers->cond_var->cond_lock);
+    bool ret = queue_push(workers->task_queue, (void *)task);
+    while (!ret) {
+        pthread_cond_wait(&workers->cond_var->cond_variable, &workers->cond_var->cond_lock);
+        ret = queue_push(workers->task_queue, (void *)task);
+    }
+    pthread_mutex_unlock(&workers->cond_var->cond_lock);
+    pthread_cond_signal(&workers->cond_var->cond_variable);
+    return ret;
 }
 
 bool submit_worker_task(Threadpool *workers, worker_thread_func func, void *arg)
 {
-	ThreadPoolTask task = (ThreadPoolTask){ 0 };
-	task.func = func;
-	task.arg = arg;
-	task.sleep_time = 0;
-	return submit_task(workers, &task);
+    ThreadPoolTask task = (ThreadPoolTask){ 0 };
+    task.func = func;
+    task.arg = arg;
+    task.sleep_time = 0;
+    return submit_task(workers, &task);
 }
 
 bool submit_worker_task_timeout(Threadpool *workers, worker_thread_func func, void *arg,
-								int timeout)
+                                int timeout)
 {
-	ThreadPoolTask task = (ThreadPoolTask){ 0 };
-	task.func = func;
-	task.arg = arg;
-	task.sleep_time = timeout;
-	return submit_task(workers, &task);
+    ThreadPoolTask task = (ThreadPoolTask){ 0 };
+    task.func = func;
+    task.arg = arg;
+    task.sleep_time = timeout;
+    return submit_task(workers, &task);
 }
