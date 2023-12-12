@@ -27,36 +27,36 @@
 #define CLIENT_JOIN_TIMEOUT 5 // Seconds
 
 typedef struct {
-	int socket;
-	bool connected;
-	bool running;
-	AddrBook *addr_book;
-	Threadpool *threadpool;
-	char name[256];
-	struct sockaddr_in server_addr;
-	SymmetricKey server_key;
-	KeyPair key_pair;
-	uint32_t server_header_key;
+    int socket;
+    bool connected;
+    bool running;
+    AddrBook *addr_book;
+    Threadpool *threadpool;
+    char name[256];
+    struct sockaddr_in server_addr;
+    SymmetricKey server_key;
+    KeyPair key_pair;
+    uint32_t server_header_key;
 } ChatClient;
 
 typedef struct {
-	size_t len;
-	int socket;
-	bool *running;
-	bool *connected;
-	AddrBook *addr_book;
-	char buffer[CHAT_MESSAGE_MAX_LEN];
-	struct sockaddr_in ext_addr;
-	struct sockaddr_in server_addr;
-	char *name;
-	SymmetricKey *server_key;
-	KeyPair *key_pair;
-	uint32_t server_header_key;
+    size_t len;
+    int socket;
+    bool *running;
+    bool *connected;
+    AddrBook *addr_book;
+    char buffer[CHAT_MESSAGE_MAX_LEN];
+    struct sockaddr_in ext_addr;
+    struct sockaddr_in server_addr;
+    char *name;
+    SymmetricKey *server_key;
+    KeyPair *key_pair;
+    uint32_t server_header_key;
 } ClientThreadData;
 
 typedef struct {
-	int socket;
-	ChatMessage *msg;
+    int socket;
+    ChatMessage *msg;
 } PingData;
 
 typedef bool MessageRecvExtraHandler(void *data);

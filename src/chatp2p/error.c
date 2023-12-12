@@ -19,10 +19,10 @@
 #include <stdlib.h>
 
 MessageErrorHandler *message_error_handlers[CHAT_ERROR_COUNT] = { NULL, NULL, NULL, NULL,
-																  NULL, NULL, NULL, NULL };
+                                                                  NULL, NULL, NULL, NULL };
 
 void chat_handle_message_error(ChatErrorType type, void *data)
 {
-	if (type < CHAT_ERROR_COUNT && message_error_handlers[type] != NULL)
-		message_error_handlers[type](data);
+    if (type < CHAT_ERROR_COUNT && message_error_handlers[type] != NULL)
+        message_error_handlers[type](data);
 }

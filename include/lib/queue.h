@@ -23,12 +23,12 @@
 #include <sys/types.h>
 
 typedef struct queue_t {
-	uint8_t *items;
-	size_t t_size;
-	size_t size;
-	size_t capacity;
-	size_t start;
-	size_t end;
+    uint8_t *items;
+    size_t t_size;
+    size_t size;
+    size_t capacity;
+    size_t start;
+    size_t end;
 } Queue;
 
 bool queue_init(Queue *queue, size_t capacity, size_t t_size);

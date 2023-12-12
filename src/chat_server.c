@@ -20,19 +20,19 @@
 
 int main(void)
 {
-	ChatServer server;
-	if (server_init(&server, ".env") == -1) {
-		LOG_ERR("Failed to initialize server, exiting...");
-		return -1;
-	}
+    ChatServer server;
+    if (server_init(&server, ".env") == -1) {
+        LOG_ERR("Failed to initialize server, exiting...");
+        return -1;
+    }
 
-	if (server_run(&server) == -1) {
-		LOG_ERR("Failed to run server, exiting...");
-		server_free(&server);
-		return -1;
-	}
+    if (server_run(&server) == -1) {
+        LOG_ERR("Failed to run server, exiting...");
+        server_free(&server);
+        return -1;
+    }
 
-	server_free(&server);
+    server_free(&server);
 
-	return 0;
+    return 0;
 }

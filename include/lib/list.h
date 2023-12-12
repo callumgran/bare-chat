@@ -26,10 +26,10 @@
 #define LIST_ITEM_NOT_FOUND __SIZE_MAX__
 
 typedef struct list_t {
-	uint8_t *items;
-	size_t t_size;
-	size_t size;
-	size_t capacity;
+    uint8_t *items;
+    size_t t_size;
+    size_t size;
+    size_t capacity;
 } List;
 
 typedef int compare_fn_t(const void *, const void *);

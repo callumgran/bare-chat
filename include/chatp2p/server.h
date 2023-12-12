@@ -25,23 +25,23 @@
 #include <lib/threadpool.h>
 
 typedef struct {
-	int socket;
-	bool running;
-	AddrBook *addr_book;
-	Threadpool *threadpool;
-	KeyPair key_pair;
-	uint32_t server_header_key;
+    int socket;
+    bool running;
+    AddrBook *addr_book;
+    Threadpool *threadpool;
+    KeyPair key_pair;
+    uint32_t server_header_key;
 } ChatServer;
 
 typedef struct {
-	size_t len;
-	int socket;
-	bool *running;
-	AddrBook *addr_book;
-	char buffer[CHAT_MESSAGE_MAX_LEN];
-	struct sockaddr_in client_addr;
-	KeyPair *key_pair;
-	uint32_t server_header_key;
+    size_t len;
+    int socket;
+    bool *running;
+    AddrBook *addr_book;
+    char buffer[CHAT_MESSAGE_MAX_LEN];
+    struct sockaddr_in client_addr;
+    KeyPair *key_pair;
+    uint32_t server_header_key;
 } ServerThreadData;
 
 int server_init(ChatServer *server, char *env_file);

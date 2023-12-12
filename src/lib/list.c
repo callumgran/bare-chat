@@ -23,170 +23,170 @@
 
 static bool increase_capacity(List *list)
 {
-	if (list->size == list->capacity) {
-		list->capacity *= 2;
-		list->items = realloc(list->items, list->capacity * list->t_size);
-		if (list->items == NULL)
-			return false;
-	}
+    if (list->size == list->capacity) {
+        list->capacity *= 2;
+        list->items = realloc(list->items, list->capacity * list->t_size);
+        if (list->items == NULL)
+            return false;
+    }
 
-	return true;
+    return true;
 }
 
 bool list_init(List *list, size_t t_size)
 {
-	if (list == NULL)
-		return false;
+    if (list == NULL)
+        return false;
 
-	if (t_size == 0)
-		return false;
+    if (t_size == 0)
+        return false;
 
-	list->t_size = t_size;
-	list->size = 0;
-	list->capacity = LIST_STARTING_CAPACITY;
-	list->items = malloc(list->capacity * list->t_size);
+    list->t_size = t_size;
+    list->size = 0;
+    list->capacity = LIST_STARTING_CAPACITY;
+    list->items = malloc(list->capacity * list->t_size);
 
-	if (list->items == NULL)
-		return false;
+    if (list->items == NULL)
+        return false;
 
-	return true;
+    return true;
 }
 
 bool list_init_prealloc(List *list, size_t t_size, size_t capacity)
 {
-	if (list == NULL)
-		return false;
+    if (list == NULL)
+        return false;
 
-	list->t_size = t_size;
-	list->size = 0;
-	list->capacity = capacity;
-	list->items = malloc(list->capacity * list->t_size);
+    list->t_size = t_size;
+    list->size = 0;
+    list->capacity = capacity;
+    list->items = malloc(list->capacity * list->t_size);
 
-	if (list->items == NULL)
-		return false;
+    if (list->items == NULL)
+        return false;
 
-	return true;
+    return true;
 }
 
 bool list_free(List *list)
 {
-	if (list == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || list->items == NULL)
+        return false;
 
-	free(list->items);
+    free(list->items);
 
-	return true;
+    return true;
 }
 
 bool list_empty(const List *list)
 {
-	if (list == NULL)
-		return false;
+    if (list == NULL)
+        return false;
 
-	return !list->size;
+    return !list->size;
 }
 
 size_t list_index_of(List *list, const void *item, compare_fn_t *cmp)
 {
-	if (list == NULL || item == NULL || list->items == NULL)
-		return LIST_ITEM_NOT_FOUND;
+    if (list == NULL || item == NULL || list->items == NULL)
+        return LIST_ITEM_NOT_FOUND;
 
-	for (size_t i = 0; i < list->size; i++) {
-		if (cmp(list->items + i * list->t_size, item) == 0) {
-			return i;
-		}
-	}
+    for (size_t i = 0; i < list->size; i++) {
+        if (cmp(list->items + i * list->t_size, item) == 0) {
+            return i;
+        }
+    }
 
-	return LIST_ITEM_NOT_FOUND;
+    return LIST_ITEM_NOT_FOUND;
 }
 
 void *list_get(List *list, size_t idx)
 {
-	if (list == NULL || list->items == NULL)
-		return NULL;
+    if (list == NULL || list->items == NULL)
+        return NULL;
 
-	if (idx >= list->size)
-		return NULL;
+    if (idx >= list->size)
+        return NULL;
 
-	return list->items + idx * list->t_size;
+    return list->items + idx * list->t_size;
 }
 
 bool list_contains(List *list, const void *item, compare_fn_t *cmp)
 {
-	if (list == NULL || item == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || item == NULL || list->items == NULL)
+        return false;
 
-	return list_index_of(list, item, cmp) != LIST_ITEM_NOT_FOUND;
+    return list_index_of(list, item, cmp) != LIST_ITEM_NOT_FOUND;
 }
 
 bool list_append(List *list, void *item)
 {
-	if (list == NULL || item == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || item == NULL || list->items == NULL)
+        return false;
 
-	if (increase_capacity(list) == false)
-		return false;
+    if (increase_capacity(list) == false)
+        return false;
 
-	memcpy(list->items + list->size * list->t_size, item, list->t_size);
+    memcpy(list->items + list->size * list->t_size, item, list->t_size);
 
-	++list->size;
+    ++list->size;
 
-	return true;
+    return true;
 }
 
 bool list_remove(List *list, size_t idx)
 {
-	if (list == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || list->items == NULL)
+        return false;
 
-	if (idx >= list->size)
-		return false;
+    if (idx >= list->size)
+        return false;
 
-	for (size_t i = idx; i < list->size - 1; i++)
-		memcpy(list->items + i * list->t_size, list->items + (i + 1) * list->t_size, list->t_size);
+    for (size_t i = idx; i < list->size - 1; i++)
+        memcpy(list->items + i * list->t_size, list->items + (i + 1) * list->t_size, list->t_size);
 
-	--list->size;
+    --list->size;
 
-	return true;
+    return true;
 }
 
 bool list_remove_item(List *list, const void *item, compare_fn_t *cmp)
 {
-	if (list == NULL || item == NULL || cmp == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || item == NULL || cmp == NULL || list->items == NULL)
+        return false;
 
-	size_t ret;
+    size_t ret;
 
-	if ((ret = list_index_of(list, item, cmp)) == LIST_ITEM_NOT_FOUND)
-		return false;
+    if ((ret = list_index_of(list, item, cmp)) == LIST_ITEM_NOT_FOUND)
+        return false;
 
-	return list_remove(list, ret);
+    return list_remove(list, ret);
 }
 
 bool list_remove_all(List *list)
 {
-	if (list == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || list->items == NULL)
+        return false;
 
-	list->size = 0;
-	list->capacity = LIST_STARTING_CAPACITY;
-	list->items = realloc(list->items, list->capacity * list->t_size);
+    list->size = 0;
+    list->capacity = LIST_STARTING_CAPACITY;
+    list->items = realloc(list->items, list->capacity * list->t_size);
 
-	return true;
+    return true;
 }
 
 bool list_sort(List *list, compare_fn_t *cmp)
 {
-	if (list == NULL || cmp == NULL || list->items == NULL)
-		return false;
+    if (list == NULL || cmp == NULL || list->items == NULL)
+        return false;
 
-	if (list->size == 0)
-		return false;
+    if (list->size == 0)
+        return false;
 
-	if (list->size == 1)
-		return true;
+    if (list->size == 1)
+        return true;
 
-	qsort(list->items, list->size, list->t_size, cmp);
+    qsort(list->items, list->size, list->t_size, cmp);
 
-	return true;
+    return true;
 }

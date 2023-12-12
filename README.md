@@ -9,6 +9,7 @@ Before you can compile and run the P2P chat service, ensure you atleast have the
 - C Compiler (e.g., gcc)
 - OpenSSL
 - Make
+- Readline
 
 Note that you will also need to host the server on a machine that is accessible to all clients. This can be done by hosting the server on a public IP address or otherwise if you are technically inclined. This is because the p2p chat is based on all clients joining a server and finding eachother from there. (Kinda ass I know but it's not finished and privacy will be improved).
 

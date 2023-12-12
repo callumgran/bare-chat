@@ -42,7 +42,7 @@ server-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined
 server-asan: $(TARGET-FUZZ)
 
 client:
-	$(CC) $(CFLAGS) -o $(CLIENT) src/client/terminal_client.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/chatp2p/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c src/encrypt/encrypt.c src/chatp2p/error.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $(CLIENT) src/client/client_impl.c src/lib/env_parser.c src/lib/queue.c src/lib/threadpool.c src/chatp2p/client.c src/chatp2p/address_book.c src/chatp2p/chat_msg.c src/encrypt/encrypt.c src/chatp2p/error.c $(LDLIBS)
 
 client-asan: CFLAGS += -fsanitize=address -fsanitize=undefined
 client-asan: LDFLAGS += -fsanitize=address -fsanitize=undefined

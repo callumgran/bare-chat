@@ -19,13 +19,13 @@
 #define ENV_PARSER_H
 
 typedef struct {
-	char *key;
-	char *value;
+    char *key;
+    char *value;
 } EnvVar;
 
 typedef struct {
-	EnvVar *vars;
-	int num_vars;
+    EnvVar *vars;
+    int num_vars;
 } EnvVars;
 
 EnvVars *env_parse(const char *env);
